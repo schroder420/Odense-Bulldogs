@@ -1,0 +1,23 @@
+'use client';
+import {useEffect,useState} from 'react';
+import QRCode from 'qrcode';
+import {ArrowUpRight,Maximize,Trophy,WifiOff} from 'lucide-react';
+import {Brand} from '@/components/Brand';
+import {api} from '@/lib/client';
+import {formatTime} from '@/lib/game';
+import type {Board} from '@/lib/types';
+export default function Leaderboard(){const [board,setBoard]=useState<Board|null>(null),[qr,setQr]=useState(''),[url,setUrl]=useState(''),[offline,setOffline]=useState(false),[now,setNow]=useState(Date.now()),[offset,setOffset]=useState(0);
+ useEffect(()=>{let gone=false;const target=location.origin;setUrl(target.replace(/^https?:\/\//,''));QRCode.toDataURL(target,{width:500,margin:1,errorCorrectionLevel:'M',color:{dark:'#102f21',light:'#ffffff'}}).then(setQr);
+  const update=async()=>{try{const b=await api<Board>('board');if(!gone){setBoard(b);setOffline(false);setOffset(new Date(b.serverTime).getTime()-Date.now());}}catch{if(!gone)setOffline(true);}};update();const poll=setInterval(update,2500),clock=setInterval(()=>setNow(Date.now()),1000);return()=>{gone=true;clearInterval(poll);clearInterval(clock);};},[]);
+ const round=board?.round;const remaining=round?Math.max(0,Math.ceil((new Date(round.ends_at).getTime()-now-offset)/1000)):0;const final=round?.status==='final';const closing=!!round&&(!remaining||round.status==='closing')&&!final;
+ const label=final?'KAMPENS VINDERE':closing?'SIDSTE FORSØG AFSLUTTES':round?'LIVE LEADERBOARD':'KLAR TIL KAMPENS PAUSE';
+ return <div className="arena-page"><header><Brand/><div className="arena-status">{offline?<><WifiOff size={17}/> FORBINDELSE AFBRUDT</>:<><span className="live-dot"/>{label}</>}<button className="icon-button" aria-label="Vis i fuld skærm" onClick={()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen().catch(()=>{})}><Maximize size={19}/></button></div></header>
+ <main className="arena-grid"><section className="ranking"><div className="ranking-title"><div><p className="eyebrow">ODENSE BULLDOGS / PAUSESPILLET</p><h1>{final?'DE HOLDT':'HVEM HOLDER'}<br/><em>PUCKEN I LIVE?</em></h1></div><Trophy className="outline-trophy" size={68}/></div>
+ <div className="ranking-label"><span>PLACERING / SPILLER</span><span>OVERLEVELSE</span></div>
+ <div className="top-five">{Array.from({length:5},(_,i)=>{const e=board?.entries[i];return <div className={`rank-row ${i===0?'first':''} ${e?'':'empty'}`} key={i}><span className="rank-number">{String(i+1).padStart(2,'0')}</span><div className="rank-name">{e?.nickname|| (i===0?'Din plads venter':'—')}{i===0&&e&&<small>{final?'KAMPENS VINDER':'TIDEN AT SLÅ'}</small>}</div><strong>{e?formatTime(e.score_ms):'—'}<small> SEK</small></strong>{i===0&&<Trophy size={22}/>}</div>;})}</div>
+ {!final&&<div className="next-five">{Array.from({length:5},(_,i)=>{const e=board?.entries[i+5];return <div key={i}><span>{String(i+6).padStart(2,'0')}</span><p>{e?.nickname||'—'}<strong>{e?`${formatTime(e.score_ms)} sek.`:'Plads til dig'}</strong></p></div>;})}</div>}
+ <div className="ranking-foot"><span><strong>{(board?.participants||0).toLocaleString('da-DK')}</strong> DELTAGERE MED RESULTAT</span><span>{offline?'Viser senest hentede resultater':'BEDSTE FORSØG TÆLLER'}</span></div>
+ </section><aside className="join-panel"><div className="join-top"><span>{final?'TAK FOR KAMPEN':closing?'SNART FINDER VI VINDERNE':'DIN TELEFON. DIN IS.'}</span><ArrowUpRight size={30}/></div><h2>{final?'SE DIT':'SCAN &'}<br/>{final?'PRÆMIEBEVIS':'SPIL MED.'}</h2><div className="qr-card">{qr?<img src={qr} alt="Scan QR-koden for at åbne spillet"/>:<div className="qr-loading">Henter QR-kode…</div>}</div><p className="scan-url">{url}</p><p className="scan-help">{final?'Åbn spillet på den telefon, du spillede med. Vis dit præmiebevis til personalet.':'Scan koden med kameraet. Tryk på dine medspillere. Overlev længst muligt.'}</p><div className="arena-countdown"><span>{final?'KONKURRENCEN ER AFSLUTTET':closing?'VI AFVENTER DE SIDSTE TIDER':round?'NYE FORSØG LUKKER OM':'TRÆNINGEN ER ÅBEN'}</span>{round&&!final&&!closing?<strong>{Math.floor(remaining/60).toString().padStart(2,'0')}<i>:</i>{(remaining%60).toString().padStart(2,'0')}</strong>:<strong className="countdown-word">{final?'TAK, ODENSE!':closing?'BLIV HÆNGENDE':'PRØV SPILLET'}</strong>}</div></aside></main>
+ <div className="arena-bottom"><div><Trophy size={22}/><strong>{round?.prize||'TOP 5 VINDER'}</strong></div><span>ÉT HOLD. ÉN BY. <b>ODENSE.</b></span></div>
+ </div>;
+}
