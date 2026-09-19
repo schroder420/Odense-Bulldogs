@@ -1,0 +1,2 @@
+import type {MetadataRoute} from 'next';
+export default function manifest():MetadataRoute.Manifest{return {name:'Hold pucken i live · Odense Bulldogs',short_name:'Bulldogs Pausespil',description:'Spil dig ind i top 5 i Odense Bulldogs pausespil.',start_url:'/',display:'fullscreen',background_color:'#0b241a',theme_color:'#18492e',orientation:'portrait',icons:[{src:'/assets/bulldogs-logo.png',sizes:'512x512',type:'image/png'}]};}

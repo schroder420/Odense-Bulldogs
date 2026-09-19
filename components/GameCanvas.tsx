@@ -6,7 +6,8 @@ export default function GameCanvas({session,onEnd,onReady}:{session:Session|null
  const canvas=useRef<HTMLCanvasElement>(null);const game=useRef<Game|null>(null);const camera=useRef(0);const start=useRef(0);const callback=useRef(onEnd);callback.current=onEnd;
  const [hud,setHud]=useState({time:0,passes:0,short:false,step:0,flight:false});const [assetError,setAssetError]=useState(false);
  useEffect(()=>{
-  let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1;const ctx=canvas.current!.getContext('2d')!;
+  let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
+  const lowPower=typeof navigator!=='undefined' && ((navigator.hardwareConcurrency||4)<=4 || (navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData===true);
   const home=new Image(),away=new Image(),logo=new Image();home.src='/assets/home-skater.webp';away.src='/assets/opponent-skater.webp';logo.src='/assets/bulldogs-logo.png';
   const g=createGame(session?.seed||1978,session?.limit||Infinity);game.current=g;camera.current=0;
   const loaded=Promise.all([home,away,logo].map(im=>im.decode()));
@@ -18,10 +19,10 @@ export default function GameCanvas({session,onEnd,onReady}:{session:Session|null
     ctx.restore();
   };
   const draw=()=>{
-    ctx.setTransform(1,0,0,1,0,0);const dpr=Math.min(window.devicePixelRatio||1,2);const w=Math.round(WIDTH*dpr),h=Math.round(HEIGHT*dpr);if(canvas.current!.width!==w){canvas.current!.width=w;canvas.current!.height=h;}ctx.scale(dpr,dpr);shapeScale=HEIGHT*canvas.current!.clientWidth/(WIDTH*canvas.current!.clientHeight);
+    ctx.setTransform(1,0,0,1,0,0);const dpr=lowPower?1:Math.min(window.devicePixelRatio||1,2);const w=Math.round(WIDTH*dpr),h=Math.round(HEIGHT*dpr);if(canvas.current!.width!==w){canvas.current!.width=w;canvas.current!.height=h;}ctx.scale(dpr,dpr);shapeScale=HEIGHT*canvas.current!.clientWidth/(WIDTH*canvas.current!.clientHeight);
     const gradient=ctx.createLinearGradient(0,0,WIDTH,HEIGHT);gradient.addColorStop(0,'#eef5f5');gradient.addColorStop(.5,'#ffffff');gradient.addColorStop(1,'#dce9ed');ctx.fillStyle=gradient;ctx.fillRect(0,0,WIDTH,HEIGHT);
     ctx.save();ctx.strokeStyle='rgba(90,121,132,.045)';ctx.lineWidth=1;
-    for(let i=0;i<75;i++){const x=(i*137)%400,y=((i*91-camera.current*.7)%680+680)%680;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+60,y-95);ctx.stroke();}ctx.restore();
+    if(!lowPower)for(let i=0;i<75;i++){const x=(i*137)%400,y=((i*91-camera.current*.7)%680+680)%680;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+60,y-95);ctx.stroke();}ctx.restore();
     const rinkY=(((-camera.current+120)%1000)+1000)%1000-250;
     ctx.strokeStyle='rgba(180,35,42,.37)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(15,rinkY);ctx.lineTo(385,rinkY);ctx.stroke();
     ctx.beginPath();ctx.arc(200,rinkY,85,0,Math.PI*2);ctx.stroke();

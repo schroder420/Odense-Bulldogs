@@ -10,6 +10,7 @@ export function ticket(id:string,kind='player',ttl=60*60*24*30){const body=Buffe
 export function verify(value:string|undefined,kind='player'):string|null{try {if(!value||!configured())return null;const [body,sig]=value.split('.');if(!equal(sig,sign(body)))return null;const v=JSON.parse(Buffer.from(body,'base64url').toString());if(v.kind!==kind||v.expires<Date.now()||typeof v.id!=='string')return null;return v.id;}catch{return null;}}
 export async function player(){return verify((await cookies()).get('bulldogs-player')?.value);}
 export async function admin(){return verify((await cookies()).get('bulldogs-admin')?.value,'admin')==='staff';}
+export async function leaderboard(){return verify((await cookies()).get('bulldogs-leaderboard')?.value,'leaderboard')==='screen';}
 export function claimCode(round:string,id:string){return createHmac('sha256',process.env.SESSION_SECRET!).update(`prize:${round}:${id}`).digest('hex').slice(0,24).toUpperCase();}
 export const cookieOptions={httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict' as const,path:'/'};
 export async function rpc(name:string,args:Record<string,unknown>={}){const {data,error}=await db().rpc(name,args);if(error)throw new Error(error.message);return data;}

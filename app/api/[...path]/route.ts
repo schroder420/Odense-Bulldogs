@@ -1,6 +1,6 @@
 import { NextRequest,NextResponse } from 'next/server';
 import { randomUUID,randomInt } from 'node:crypto';
-import {admin,claimCode,configured,cookieOptions,db,equal,hash,player,rpc,ticket} from '@/lib/server';
+import {admin,claimCode,configured,cookieOptions,db,equal,hash,leaderboard,player,rpc,ticket} from '@/lib/server';
 import {replay} from '@/lib/game';
 export const runtime='nodejs';
 export const maxDuration=15;
@@ -14,7 +14,8 @@ function fail(error:unknown){const message=error instanceof Error?error.message:
 export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
  try{
  const path=(await params).path.join('/');
- if(path==='board'){
+ if(path==='board'||path==='screen-board'){
+  if(path==='screen-board' && process.env.LEADERBOARD_ACCESS_CODE && !(await leaderboard()))return json({error:'Storskærmen kræver adgangskode.'},401);
   if(!configured())return json({configured:false,round:null,entries:[],participants:0,serverTime:new Date().toISOString()});
   const board=await rpc('public_board');
   return NextResponse.json({...board,configured:true},{headers:{'Cache-Control':'public, max-age=0, s-maxage=2, stale-while-revalidate=3'}});
@@ -75,6 +76,12 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   if(!await rpc('admin_rate_limit',{p_bucket:bucket}))return json({error:'For mange forsøg. Vent 15 minutter.'},429);
   if(typeof body.password!=='string'||!equal(body.password,process.env.ADMIN_PASSWORD))return json({error:'Forkert adgangskode.'},401);
   const response=json({ok:true});response.cookies.set('bulldogs-admin',ticket('staff','admin',28800),{...cookieOptions,maxAge:28800});return response;
+ }
+ if(path==='leaderboard/login'){
+  const secret=process.env.LEADERBOARD_ACCESS_CODE;
+  if(!secret||secret.length<8)return json({error:'Storskærmens adgangskode er ikke sat op endnu.'},503);
+  if(typeof body.password!=='string'||!equal(body.password,secret))return json({error:'Forkert adgangskode.'},401);
+  const response=json({ok:true});response.cookies.set('bulldogs-leaderboard',ticket('screen','leaderboard',28800),{...cookieOptions,maxAge:28800});return response;
  }
  if(!path.startsWith('admin/')||!await admin())return json({error:'Log ind som personale.'},401);
  if(path==='admin/logout'){const response=json({ok:true});response.cookies.delete('bulldogs-admin');return response;}

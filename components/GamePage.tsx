@@ -1,6 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {ArrowUpRight,ArrowRight,Trophy,ShieldCheck,RotateCcw,Ticket,MoveUpRight} from 'lucide-react';
+import {ArrowUpRight,ArrowRight,Trophy,ShieldCheck,RotateCcw,Ticket,MoveUpRight,Maximize2} from 'lucide-react';
 import {Brand,Footer} from './Brand';
 import GameCanvas,{type Session} from './GameCanvas';
 import {formatTime,reasons,type Game} from '@/lib/game';
@@ -32,7 +32,8 @@ export default function GamePage(){
   if(session?.practice){const best=Math.max(practiceBest,g.score);setPracticeBest(best);try{localStorage.setItem('bulldogs-practice-best',String(best));}catch{}return;}
   if(!session)return;const payload={id:session.id,events:g.events,end:g.score,abandoned:g.dead==='left'};try{localStorage.setItem('bulldogs-pending',JSON.stringify(payload));}catch{}setPending(true);try{await submit(payload);}catch(e){setError(e instanceof Error?e.message:'Resultatet afventer forbindelse.');}
  };
- return <div className={`page game-page ${playing?'is-playing':''}`}><header><Brand/><span className="event-label"><span className="diamond"/>{playing?(session?.practice?'TRÆNING':'KONKURRENCEN ER I GANG'):open?'KAMPENS PAUSE':'PAUSESPILLET'}</span></header>
+ const enterFullscreen=()=>{const element=document.documentElement as HTMLElement & {requestFullscreen?:()=>Promise<void>};element.requestFullscreen?.().catch(()=>{});};
+ return <div className={`page game-page ${playing?'is-playing':''}`}><header><Brand/><span className="event-label"><span className="diamond"/>{playing?(session?.practice?'TRÆNING':'KONKURRENCEN ER I GANG'):open?'KAMPENS PAUSE':'PAUSESPILLET'}{playing&&<button className="game-fullscreen" aria-label="Åbn spillet i fuld skærm" onClick={enterFullscreen}><Maximize2 size={16}/></button>}</span></header>
  <main className="play-layout"><section className="side-copy"><p className="eyebrow"><span/> ISEN ER DIN</p><h1>HOLD<br/>PUCKEN<br/><em>I LIVE.</em></h1><p className="lede">Ét tryk. En ny chance.<br/>Hvor længe kan du holde presset væk?</p>
  <div className="instructions"><div><b>01</b><p><strong>Find din medspiller</strong><span>Hvid trøje. Fri afleveringsbane.</span></p><MoveUpRight/></div><div><b>02</b><p><strong>Spil, før du bliver fanget</strong><span>Ringen bliver rød, når presset stiger.</span></p><RotateCcw/></div><div><b>03</b><p><strong>Hold hovedet koldt</strong><span>Tempoet stiger. Din bedste tid tæller.</span></p><Trophy/></div></div>
  <div className="prize-strip"><Trophy size={24}/><p><strong>{board?.round?.prize||'KÆMP DIG IND I TOP 5'}</strong><span>{board?.round?'Kampens bedste tider vinder.':'Spil dig varm inden næste konkurrence.'}</span></p></div>
@@ -43,8 +44,8 @@ export default function GamePage(){
  {!playing&&countdown===null&&<div className={`game-overlay ${result?'has-result':''}`}>
   {result?<><p className="eyebrow">{session?.practice?'TRÆNINGSRESULTAT':saved?'RESULTAT GEMT':'DIT RESULTAT'}</p><h2>{reasons[result.dead!]}</h2><div className="result-time">{formatTime(result.score)}<span>SEKUNDER</span></div><p className="result-detail">{result.passes} afleveringer <span>·</span> Bedste {formatTime(session?.practice?practiceBest:Math.max(me?.best||0,saved?result.score:0))} sek.</p>{!session?.practice&&<p className="save-status">{saved?<><ShieldCheck size={15}/> Din tid er godkendt og gemt</>:'Dit resultat afventer godkendelse'}</p>}<button className="primary" disabled={busy||(!session?.practice&&pending)} onClick={()=>begin(session?.practice||!open)}><RotateCcw size={18}/>Spil igen<ArrowRight size={20}/></button><button className="text-button" onClick={()=>{setResult(null);setSession(null);}}>Tilbage til start</button></>:<>
   <div className="lobby-heading"><span className="mini-logo"><img src="/assets/bulldogs-logo.png" alt=""/></span><div><p className="eyebrow">{open?'DIN TUR PÅ ISEN':'KLAR TIL FØRSTE AFLEVERING?'}</p><h2>Hvor længe holder du?</h2></div></div>
-  <p className="lobby-help">Tryk på de hvide spillere.<br/>Undgå modstanderne — og hold pucken i live.</p>
-  {open&&<label className="name-label">Dit navn på storskærmen<input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="Fx BulldogsFan78" minLength={2} maxLength={18} autoComplete="nickname"/></label>}
+  <p className="lobby-help">Tryk på en hvid medspiller for at aflevere.<br/>Undgå modstanderne — og hold pucken i live.</p>
+  <label className="name-label">{open?'Dit navn på storskærmen':'Dit navn til træning (valgfrit)'}<input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="Fx BulldogsFan78" minLength={2} maxLength={18} autoComplete="nickname" enterKeyHint="done"/></label>
   <button className="primary" disabled={busy||!ready||(!!open&&nickname.trim().length<2)|| (!!open&&pending)} onClick={()=>begin(!open)}>{busy?'GØR ISEN KLAR…':open?'SPIL MED':'PRØV SPILLET'}<ArrowUpRight size={22}/></button>
   {open?<button className="text-button" disabled={busy} onClick={()=>begin(true)}>Tag en træningsrunde først</button>:<p className="practice-note">Træning · tæller ikke i konkurrencen</p>}
   <button className="rules-toggle" onClick={()=>setRules(!rules)} aria-expanded={rules}>{rules?'Skjul spilleregler':'Sådan spiller du'}</button>
