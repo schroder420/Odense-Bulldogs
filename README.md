@@ -19,7 +19,7 @@ En QR-kode med `localhost` virker kun på samme computer. Efter publicering brug
 
 - Automatisk bevægelse, fremadrettede afleveringer, modstandere, afskæringer, synligt bandespil og korte undertalssekvenser.
 - Tre rolige første modtagere; de første to afleveringer har ingen forsvarere i afleveringsbanen. Modstandere har altid en anden dragt.
-- Tidsfrist: `max(1000, 3500 × 0.8 ^ floor(tid_i_sekunder / 15))` millisekunder. Tidsfristen bestemmes ved modtagelse af pucken. Minimum 1 sekund fra 90 sekunder og frem.
+- Tidsfrist: `max(1000, 3500 × 0.8 ^ floor(tid_i_sekunder / 10))` millisekunder. Tidsfristen bestemmes ved modtagelse af pucken. Minimum 1 sekund fra 60 sekunder og frem.
 - Tryk på en hvid spiller eller en orange bandemarkering. Computer: 1–3, B. Skift væk fra fanen afslutter forsøget. Flight time er 240 ms direkte / 380 ms via banden.
 - Serveren udsteder tilfældig bane og forsøgs-ID, genspiller input og beregner resultatet. Klienten sender ikke en vilkårlig highscore. Ét aktivt forsøg pr. deltager, og afsluttede forsøg kan ikke indsendes flere gange med nye resultater.
 - Live top 10, top 5 fremhævet, permanent QR-kode, nedtælling og tilstand ved tabt forbindelse. Storskærmen opdateres hvert 2,5 sekund; fælles data har kort CDN-cache.

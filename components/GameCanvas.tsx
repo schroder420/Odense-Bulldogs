@@ -1,22 +1,28 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {act,advance,createGame,formatTime,HEIGHT,position,WIDTH,type Game,type Input,type Point} from '@/lib/game';
-export type Session={id:string;seed:number;limit:number;practice:boolean};
-export default function GameCanvas({session,onEnd,onReady}:{session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void}){
+import {act,advance,createGame,formatTime,HEIGHT,position,WIDTH,type Game,type Stage,type Point} from '@/lib/game';
+import type {OpponentKit} from '@/lib/team';
+export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit};
+export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
  const canvas=useRef<HTMLCanvasElement>(null);const game=useRef<Game|null>(null);const camera=useRef(0);const start=useRef(0);const callback=useRef(onEnd);callback.current=onEnd;
  const [hud,setHud]=useState({time:0,passes:0,short:false,step:0,flight:false});const [assetError,setAssetError]=useState(false);
  useEffect(()=>{
-  let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
+  let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1,lastFrame=0;let previousStage:Stage|null=null,previousActive:Point|null=null;let renderedStage:Stage;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
   const lowPower=typeof navigator!=='undefined' && ((navigator.hardwareConcurrency||4)<=4 || (navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData===true);
   const home=new Image(),away=new Image(),logo=new Image();home.src='/assets/home-skater.webp';away.src='/assets/opponent-skater.webp';logo.src='/assets/bulldogs-logo.png';
-  const g=createGame(session?.seed||1978,session?.limit||Infinity);game.current=g;camera.current=0;
+  const g=createGame(session?.seed||1978,session?.limit||Infinity);game.current=g;camera.current=0;renderedStage=g.stage;
   const loaded=Promise.all([home,away,logo].map(im=>im.decode()));
-  const skater=(point:Point,team:'home'|'away',number?:number,alpha=1)=>{
+  const skater=(point:Point,team:'home'|'away',number?:number,alpha=1,angle=0)=>{
     const x=point.x,y=point.y-camera.current+490;ctx.save();ctx.globalAlpha=alpha;
     ctx.fillStyle='rgba(19,46,59,.16)';ctx.beginPath();ctx.ellipse(x,y+14,24,8,0,0,Math.PI*2);ctx.fill();
-    ctx.drawImage(team==='home'?home:away,x-53,y-62*shapeScale,106,106*shapeScale);
-    if(number!==undefined){ctx.fillStyle='#18492e';ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.fillText(String(number),x,y+48*shapeScale);}
+    ctx.translate(x,y);ctx.rotate(angle);ctx.drawImage(team==='home'?home:away,-53,-62*shapeScale,106,106*shapeScale);
+    if(number!==undefined){ctx.fillStyle='#18492e';ctx.font='bold 12px Arial';ctx.textAlign='center';ctx.fillText(String(number),0,48*shapeScale);}
     ctx.restore();
+  };
+  const drawPuck=(x:number,y:number)=>{
+    ctx.save();ctx.fillStyle='rgba(12,24,24,.22)';ctx.beginPath();ctx.ellipse(x+2,y+3,7,4,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#11191a';ctx.beginPath();ctx.ellipse(x,y,6.5,3.8,0,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(x,y-1,4.5,2,0,Math.PI,Math.PI*2);ctx.stroke();ctx.restore();
   };
   const draw=()=>{
     ctx.setTransform(1,0,0,1,0,0);const dpr=lowPower?1:Math.min(window.devicePixelRatio||1,2);const w=Math.round(WIDTH*dpr),h=Math.round(HEIGHT*dpr);if(canvas.current!.width!==w){canvas.current!.width=w;canvas.current!.height=h;}ctx.scale(dpr,dpr);shapeScale=HEIGHT*canvas.current!.clientWidth/(WIDTH*canvas.current!.clientHeight);
@@ -33,28 +39,37 @@ export default function GameCanvas({session,onEnd,onReady}:{session:Session|null
     ctx.fillStyle='#d5dfe0';ctx.fillRect(0,0,12,HEIGHT);ctx.fillRect(388,0,12,HEIGHT);ctx.fillStyle='#e9a331';ctx.fillRect(10,0,4,HEIGHT);ctx.fillRect(386,0,4,HEIGHT);
     ctx.save();ctx.translate(29,330);ctx.rotate(-Math.PI/2);ctx.fillStyle='rgba(24,73,46,.22)';ctx.font='bold 12px Arial';ctx.letterSpacing='3px';ctx.fillText('ODENSE BULLDOGS',0,0);ctx.restore();
     if(g.stage.bank){const b=g.stage.bank, p=g.stage.home.find(h=>h.id===b.target)!;const target=position(p,g.now);ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle='#d97a24';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(g.active.x,g.active.y-camera.current+490);ctx.lineTo(b.point.x,b.point.y-camera.current+490);ctx.lineTo(target.x,target.y-camera.current+490);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#E48331';ctx.fillRect(b.point.x-11,b.point.y-camera.current+454,22,72);ctx.fillStyle='#1b3122';ctx.textAlign='center';ctx.font='bold 11px Arial';ctx.fillText('BANDE',b.point.x===12?48:352,b.point.y-camera.current+449);ctx.restore();}
-    g.stage.home.forEach((p,i)=>skater(position(p,g.now),'home',i+1));g.stage.away.forEach(p=>skater(position(p,g.now),'away'));
+    const arrival=Math.min(1,Math.max(0,(g.now-g.readyAt)/220));
+    if(previousStage&&arrival<1){previousStage.home.forEach(p=>{if(p.id!==g.events.at(-1)?.target)skater(position(p,g.now),'home',undefined,1-arrival);});previousStage.away.forEach(p=>skater(position(p,g.now),'away',undefined,1-arrival));if(previousActive)skater(previousActive,'home',undefined,1-arrival);}
+    g.stage.home.forEach((p,i)=>{const receiving=g.flight&&!g.flight.intercepted&&p.id===g.events.at(-1)?.target;skater(receiving?g.flight!.to:position(p,g.now),'home',i+1);});g.stage.away.forEach(p=>skater(position(p,g.now),'away'));
+    if(!g.flight&&g.step>0&&arrival<1){ctx.strokeStyle=`rgba(228,131,49,${.6*(1-arrival)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(g.active.x,g.active.y-camera.current+490,40+arrival*12,0,Math.PI*2);ctx.stroke();}
     const pressure=Math.min(1,Math.max(0,(g.now-g.readyAt)/(g.deadline-g.readyAt)));
     skater({x:g.active.x+Math.sin(g.now/200)*3,y:g.active.y+120-pressure*83},'away');
-    if(!g.flight){const x=g.active.x,y=g.active.y-camera.current+490;ctx.strokeStyle='rgba(24,73,46,.14)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,40,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=`hsl(${120*(1-pressure)},65%,${pressure>.7?46:36}%)`;ctx.beginPath();ctx.arc(x,y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pressure));ctx.stroke();skater(g.active,'home');ctx.fillStyle='#162323';ctx.beginPath();ctx.ellipse(x+35,y-30,5,3.5,0,0,Math.PI*2);ctx.fill();}
+    if(!g.flight){const x=g.active.x,y=g.active.y-camera.current+490;ctx.strokeStyle='rgba(24,73,46,.14)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,40,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=`hsl(${120*(1-pressure)},65%,${pressure>.7?46:36}%)`;ctx.beginPath();ctx.arc(x,y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pressure));ctx.stroke();skater(g.active,'home',undefined,1,Math.sin(g.now/800)*.035);drawPuck(x+35,y-30);}
     else{const f=g.flight;const raw=Math.min(1,Math.max(0,(g.now-f.start)/(f.end-f.start)));const ease=(n:number)=>n*n*(3-2*n);const u=ease(raw);
-      // Crossfade the passer and receiver so the handoff reads as one continuous move.
-      skater(f.from,'home',undefined,.72*(1-u));
-      if(!f.intercepted) { skater(f.to,'home',undefined,.18+.82*u); const rx=f.to.x,ry=f.to.y-camera.current+490;ctx.strokeStyle=`rgba(228,131,49,${.12+.25*u})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(rx,ry,34+5*u,0,Math.PI*2);ctx.stroke(); }
-      const a=f.via?(raw<.5?f.from:f.via):f.from;const b=f.via?(raw<.5?f.via:f.to):f.to;const leg=f.via?(raw<.5?raw*2:(raw-.5)*2):raw;const v=ease(leg);const x=a.x+(b.x-a.x)*v,y=a.y+(b.y-a.y)*v-camera.current+490;ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();ctx.fillStyle='#162323';ctx.beginPath();ctx.ellipse(x,y,5,3.5,0,0,Math.PI*2);ctx.fill();}
+      // The receiver is drawn once at the simulation's landing point.
+      skater(f.from,'home');
+      if(!f.intercepted) { const rx=f.to.x,ry=f.to.y-camera.current+490;ctx.strokeStyle=`rgba(228,131,49,${.12+.25*u})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(rx,ry,34+5*u,0,Math.PI*2);ctx.stroke(); }
+      const a=f.via?(raw<.5?f.from:f.via):f.from;const b=f.via?(raw<.5?f.via:f.to):f.to;const leg=f.via?(raw<.5?raw*2:(raw-.5)*2):raw;const v=leg;const x=a.x+(b.x-a.x)*v,y=a.y+(b.y-a.y)*v-camera.current+490;ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();drawPuck(x,y);}
     if(g.impact){ctx.strokeStyle='#b4232a';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(g.impact.x,g.impact.y-camera.current+490,35,35*shapeScale,0,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#142323';ctx.beginPath();ctx.arc(g.impact.x+22,g.impact.y-camera.current+473,5,0,Math.PI*2);ctx.fill();}
-    if(g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('Du spiller altid fremad ↑',200,92);}
+    if(g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('DU SPILLER FOR BULLDOGS · FREMAD ↑',200,92);}
   };
   const finish=()=>{if(!ended){ended=true;callback.current({...g,events:[...g.events]});}};
+  let lastPasser:Point|null=null;
   const loop=(now:number)=>{
    if(stopped)return;
    if(session){advance(g,Math.floor(now-start.current));if(g.dead)finish();}
    else{g.now=1000;}
-   const targetCamera=g.flight?g.flight.from.y+(g.flight.to.y-g.flight.from.y)*Math.min(1,(g.now-g.flight.start)/(g.flight.end-g.flight.start)):g.active.y;
-   camera.current+=(targetCamera-camera.current)*.16;
+   if(renderedStage!==g.stage){previousStage=renderedStage;previousActive=g.events.length?lastPasser:null;renderedStage=g.stage;}
+   if(g.flight)lastPasser=g.flight.from;
+   const progress=g.flight?Math.min(1,Math.max(0,(g.now-g.flight.start)/(g.flight.end-g.flight.start))):1;
+   const eased=progress*progress*(3-2*progress);
+   const targetCamera=g.flight?g.flight.from.y+(g.flight.to.y-g.flight.from.y)*eased:g.active.y;
+   const dt=lastFrame?Math.min(100,now-lastFrame):16.67;lastFrame=now;
+   camera.current+=(targetCamera-camera.current)*(1-Math.exp(-dt/85));
    draw();
    if(now-lastHud>60){setHud({time:g.score,passes:g.passes,short:g.stage.shortHanded,step:g.step,flight:!!g.flight});lastHud=now;}
-   frame=requestAnimationFrame(loop);
+   if(!g.dead&&session)frame=requestAnimationFrame(loop);
   };
   loaded.then(()=>{if(stopped)return;start.current=performance.now();onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
   const visibility=()=>{if(document.hidden&&session&&!g.dead){advance(g,Math.floor(performance.now()-start.current));if(!g.dead){g.dead='left';g.score=Math.floor(g.now);}finish();}};document.addEventListener('visibilitychange',visibility);
@@ -66,7 +81,7 @@ export default function GameCanvas({session,onEnd,onReady}:{session:Session|null
   const candidates=[...g.stage.home,...g.stage.away].map(p=>({p,d:Math.hypot(x-position(p,g.now).x,y-p.y)})).sort((a,b)=>a.d-b.d);if(candidates[0]?.d<43)input(candidates[0].p.id);
  }
  return <><div className="game-hud"><div><span>OVERLEVELSE</span><strong>{formatTime(hud.time)}<small> SEK</small></strong></div><div className="passes"><span>AFLEVERINGER</span><strong>{String(hud.passes).padStart(2,'0')}</strong></div></div>
- <div className="canvas-box"><canvas ref={canvas} width={WIDTH} height={HEIGHT} onPointerDown={pointer} tabIndex={session?0:-1} aria-label="Ishockeybane. Tryk på hvide medspillere. Tast 1, 2 eller 3 for at aflevere, B for bandespil." onKeyDown={e=>{const g=game.current;if(!g||e.repeat)return;const index=Number(e.key)-1;if(index>=0&&index<g.stage.home.length){e.preventDefault();input(g.stage.home[index].id);}if(e.key.toLowerCase()==='b'&&g.stage.bank)input(g.stage.bank.target,true);}}/>
+ <div className="canvas-box"><canvas ref={canvas} width={WIDTH} height={HEIGHT} onPointerDown={pointer} aria-label="Ishockeybane. Tryk på hvide Bulldogs-medspillere for at aflevere." />
  {hud.short&&session&&<div className="short-banner">UNDERTAL <span>Find den frie spiller</span></div>}
  {assetError&&<div className="asset-error" role="alert">Spillergrafikken kunne ikke hentes. Genindlæs siden, før du spiller.</div>}
  </div></>;

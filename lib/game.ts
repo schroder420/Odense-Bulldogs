@@ -1,5 +1,5 @@
 // Shared deterministic simulation. The server replays input, never trusts a submitted score.
-export const GAME_VERSION = 1;
+export const GAME_VERSION = 2;
 export const WIDTH = 400;
 export const HEIGHT = 680;
 export type Point = {x:number; y:number};
@@ -8,9 +8,9 @@ export type Input = {t:number; target:string; bank?:boolean};
 export type Reason = 'caught'|'opponent'|'intercepted'|'whistle'|'left';
 export type Stage = {home:Skater[]; away:Skater[]; bank:{target:string; point:Point}|null; shortHanded:boolean};
 export type Flight = {from:Point; to:Point; via:Point|null; start:number; end:number; intercepted:Point|null};
-export type Game = {seed:number; step:number; active:Point; stage:Stage; readyAt:number; deadline:number; now:number; limit:number; dead:Reason|null; score:number; flight:Flight|null; impact:Point|null; passes:number; events:Input[]};
+export type Game = {version:number;seed:number; step:number; active:Point; stage:Stage; readyAt:number; deadline:number; now:number; limit:number; dead:Reason|null; score:number; flight:Flight|null; impact:Point|null; passes:number; events:Input[]};
 
-export function allowance(seconds:number) { return Math.max(1000,3500 * Math.pow(.8,Math.floor(seconds/15))); }
+export function allowance(seconds:number,version=GAME_VERSION) { return Math.max(1000,3500 * Math.pow(.8,Math.floor(seconds/(version===1?15:10)))); }
 export function rng(seed:number) { let a=seed>>>0; return ()=> {a+=0x6D2B79F5; let t=a; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296;}; }
 export function distanceToSegment(p:Point,a:Point,b:Point) {const dx=b.x-a.x,dy=b.y-a.y; const u=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1))); return Math.hypot(p.x-a.x-u*dx,p.y-a.y-u*dy);}
 export function position(p:Skater,t:number):Point {return {x:p.x+Math.sin(t/750+p.phase)*7,y:p.y};}
@@ -37,7 +37,7 @@ export function stageFor(seed:number,step:number,active:Point,t:number):Stage {
  }
  return {home,away,bank,shortHanded};
 }
-export function createGame(seed:number,limit=Infinity):Game {const active={x:200,y:0};return {seed,step:0,active,stage:stageFor(seed,0,active,0),readyAt:0,deadline:3500,now:0,limit,dead:null,score:0,flight:null,impact:null,passes:0,events:[]};}
+export function createGame(seed:number,limit=Infinity,version=GAME_VERSION):Game {const active={x:200,y:0};return {version,seed,step:0,active,stage:stageFor(seed,0,active,0),readyAt:0,deadline:3500,now:0,limit,dead:null,score:0,flight:null,impact:null,passes:0,events:[]};}
 function die(g:Game,reason:Reason,t:number) {g.dead=reason;g.score=Math.max(0,Math.floor(t));g.now=t;}
 export function advance(g:Game,t:number) {
  if(g.dead)return; t=Math.max(g.now,t);
@@ -46,7 +46,7 @@ export function advance(g:Game,t:number) {
  if(g.flight && t>=g.flight.end) {
   const f=g.flight; g.flight=null;
   if(f.intercepted) {g.impact=f.intercepted;die(g,'intercepted',f.end);return;}
-  g.active=f.to;g.step++;g.passes++;g.readyAt=f.end;g.deadline=f.end+allowance(f.end/1000);g.stage=stageFor(g.seed,g.step,g.active,f.end);
+  g.active=f.to;g.step++;g.passes++;g.readyAt=f.end;g.deadline=f.end+allowance(f.end/1000,g.version);g.stage=stageFor(g.seed,g.step,g.active,f.end);
  }
  if(!g.flight && t>=Math.min(g.deadline,g.limit)) {const cut=g.limit<=g.deadline;die(g,cut?'whistle':'caught',cut?g.limit:g.deadline);return;}
  g.now=t;g.score=Math.floor(t);
@@ -67,12 +67,12 @@ export function act(g:Game,input:Input):boolean {
   for(const defender of g.stage.away){const p=position(defender,input.t),distance=previousLength+Math.hypot(p.x-a.x,p.y-a.y);if(distanceToSegment(p,a,b)<25&&distance<bestDistance){interception=p;hitLeg=i-1;bestDistance=distance;}}
   previousLength+=Math.hypot(b.x-a.x,b.y-a.y);
  }
- g.flight={from:{...g.active},to:interception||to,via:hitLeg===0?null:via,start:input.t,end:input.t+(via?380:240),intercepted:interception};
+ g.flight={from:{...g.active},to:interception||to,via:hitLeg===0?null:via,start:input.t,end:input.t+(g.version===1?(via?380:240):(via?600:450)),intercepted:interception};
  return true;
 }
-export function replay(seed:number,events:Input[],end:number,limit=Infinity,abandoned=false) {
+export function replay(seed:number,events:Input[],end:number,limit=Infinity,abandoned=false,version=GAME_VERSION) {
  if(!Number.isSafeInteger(end)||end<0||end>30*60*1000||!Array.isArray(events)||events.length>6000)throw new Error('Invalid run');
- const game=createGame(seed,limit);let last=-1;
+ const game=createGame(seed,limit,version);let last=-1;
  for(const e of events) {if(!e || !Number.isSafeInteger(e.t)||e.t<last||e.t>end||typeof e.target!=='string'||e.target.length>40||(e.bank!==undefined&&typeof e.bank!=='boolean')||!act(game,e))throw new Error('Invalid input');last=e.t;}
  // Scores are whole milliseconds; a fractional deadline is rounded down by die().
  advance(game,end+1);

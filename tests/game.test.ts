@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {act,advance,allowance,createGame,replay,position,distanceToSegment,type Game} from '../lib/game';
-test('20% less every 15 seconds, permanently clamped at one second',()=>{
- assert.equal(allowance(0),3500);assert.equal(allowance(14.999),3500);assert.equal(allowance(15),2800);assert.ok(Math.abs(allowance(30)-2240)<.001);assert.ok(Math.abs(allowance(89.99)-1146.88)<.001);assert.equal(allowance(90),1000);assert.equal(allowance(10000),1000);
+test('20% less every 10 seconds, permanently clamped at one second',()=>{
+ assert.equal(allowance(0),3500);assert.equal(allowance(9.999),3500);assert.equal(allowance(10),2800);assert.ok(Math.abs(allowance(20)-2240)<.001);assert.ok(Math.abs(allowance(59.99)-1146.88)<.001);assert.equal(allowance(60),1000);assert.equal(allowance(10000),1000);
 });
 test('catching, opponent taps, pause and modified score validation',()=>{
  const g=createGame(5);advance(g,4000);assert.equal(g.dead,'caught');assert.equal(g.score,3500);assert.equal(replay(5,[],3500).score,3500);assert.throws(()=>replay(5,[],12000));
@@ -14,7 +14,7 @@ test('500 seeded games always have a safe forward pass, including after 90 secon
  for(let seed=1;seed<=500;seed++){
   const g=createGame(seed);for(let i=0;i<180;i++){
    const t=Math.ceil(g.readyAt+allowance(g.readyAt/1000)*.58);const safe=safeChoice(g,t);assert.ok(safe,`seed ${seed}, step ${i}`);assert.ok(safe.y<g.active.y);
-   assert.ok(act(g,{t,target:safe.id}));advance(g,t+240);assert.equal(g.dead,null);
+   assert.ok(act(g,{t,target:safe.id}));advance(g,t+450);assert.equal(g.dead,null);
   }
   advance(g,g.deadline+20);assert.equal(g.dead,'caught');assert.equal(replay(seed,g.events,g.score).score,g.score);
  }
@@ -25,8 +25,8 @@ test('bank pass uses both segments, cannot be fabricated, and travels visibly',(
   const g=createGame(seed);
   for(let i=0;i<14;i++){
    const t=Math.ceil(g.readyAt+400);
-   if(g.stage.bank){const b=g.stage.bank;assert.ok(act(g,{t,target:b.target,bank:true}));assert.equal(g.flight!.end-t,380);advance(g,t+380);assert.equal(g.dead,null);checked++;}
-   else {const safe=safeChoice(g,t)!;assert.equal(act(g,{t,target:safe.id,bank:true}),false);act(g,{t,target:safe.id});advance(g,t+240);}
+   if(g.stage.bank){const b=g.stage.bank;assert.ok(act(g,{t,target:b.target,bank:true}));assert.equal(g.flight!.end-t,600);advance(g,t+600);assert.equal(g.dead,null);checked++;}
+   else {const safe=safeChoice(g,t)!;assert.equal(act(g,{t,target:safe.id,bank:true}),false);act(g,{t,target:safe.id});advance(g,t+450);}
   }
  }
  assert.ok(checked>100);

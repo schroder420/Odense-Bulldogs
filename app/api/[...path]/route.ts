@@ -1,7 +1,8 @@
 import { NextRequest,NextResponse } from 'next/server';
 import { randomUUID,randomInt } from 'node:crypto';
 import {admin,claimCode,configured,cookieOptions,db,equal,hash,leaderboard,player,rpc,ticket} from '@/lib/server';
-import {replay} from '@/lib/game';
+import {DEFAULT_OPPONENT,validKit,roundKit} from '@/lib/team';
+import {replay,GAME_VERSION} from '@/lib/game';
 export const runtime='nodejs';
 export const maxDuration=15;
 const json=(value:unknown,status=200)=>NextResponse.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
@@ -15,11 +16,12 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
  try{
  const path=(await params).path.join('/');
  if(path==='board'||path==='screen-board'){
-  if(path==='screen-board' && process.env.LEADERBOARD_ACCESS_CODE && !(await leaderboard()))return json({error:'Storskærmen kræver adgangskode.'},401);
+  if(path==='screen-board' && !(await leaderboard()))return json({error:'Storskærmen kræver adgangskode.'},401);
   if(!configured())return path==='screen-board'
    ? json({error:'Supabase er ikke forbundet på denne Vercel-deployment. Kontrollér SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY og SESSION_SECRET i Production Environment.'},503)
    : json({configured:false,round:null,entries:[],participants:0,serverTime:new Date().toISOString()});
   const board=await rpc('public_board');
+  if(path==='screen-board')return json({...board,configured:true});
   return NextResponse.json({...board,configured:true},{headers:{'Cache-Control':'public, max-age=0, s-maxage=2, stale-while-revalidate=3'}});
  }
  if(path==='me'){
@@ -63,15 +65,17 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   const response=json({id,nickname});response.cookies.set('bulldogs-player',ticket(id),{...cookieOptions,maxAge:60*60*24*30});return response;
  }
  if(path==='run/start'){
+  if(body.version!==GAME_VERSION)return json({error:'Spillet er opdateret. Genindlæs siden, før du starter.'},409);
   const id=await player();if(!id)return json({error:'Vælg først et spillernavn.'},401);
   const result=await rpc('start_run',{p_player:id,p_seed:randomInt(1,2147483647)});
-  return json({id:result.run.id,seed:Number(result.run.seed),limit:Math.floor(new Date(result.round.cutoff_at).getTime()-new Date(result.run.started_at).getTime()),roundId:result.round.id});
+  const {error:versionError}=await db().from('runs').update({game_version:GAME_VERSION}).eq('id',result.run.id);if(versionError)throw versionError;
+  return json({version:GAME_VERSION,opponent:roundKit(result.round),id:result.run.id,seed:Number(result.run.seed),limit:Math.floor(new Date(result.round.cutoff_at).getTime()-new Date(result.run.started_at).getTime()),roundId:result.round.id});
  }
  if(path==='run/finish'){
   const id=await player();if(!id)return json({error:'Din deltageradgang mangler.'},401);
   const {data:run,error}=await db().from('runs').select('*,rounds(cutoff_at)').eq('id',String(body.id)).eq('participant_id',id).single();if(error||!run)return json({error:'Forsøget blev ikke fundet.'},404);
   const limit=Math.floor(new Date(run.rounds.cutoff_at).getTime()-new Date(run.started_at).getTime());
-  const validated=replay(Number(run.seed),body.events,body.end,limit,body.abandoned===true);
+  const validated=replay(Number(run.seed),body.events,body.end,limit,body.abandoned===true,run.game_version??1);
   if(validated.score>Date.now()-new Date(run.started_at).getTime()+1000)return json({error:'Tiden kunne ikke godkendes.'},400);
   return json(await rpc('finish_run',{p_run:run.id,p_player:id,p_score:validated.score}));
  }
@@ -85,6 +89,8 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
  if(path==='leaderboard/login'){
   const secret=process.env.LEADERBOARD_ACCESS_CODE;
   if(!secret||secret.length<8)return json({error:'Storskærmens adgangskode er ikke sat op endnu.'},503);
+  const bucket=hash('screen:'+(req.headers.get('x-vercel-forwarded-for')?.split(',')[0]||req.headers.get('x-forwarded-for')?.split(',')[0]||'local'));
+  if(!await rpc('admin_rate_limit',{p_bucket:bucket}))return json({error:'For mange forsøg. Vent 15 minutter.'},429);
   if(typeof body.password!=='string'||!equal(body.password,secret))return json({error:'Forkert adgangskode.'},401);
   const response=json({ok:true});response.cookies.set('bulldogs-leaderboard',ticket('screen','leaderboard',28800),{...cookieOptions,maxAge:28800});return response;
  }
@@ -92,7 +98,8 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
  if(path==='admin/logout'){const response=json({ok:true});response.cookies.delete('bulldogs-admin');return response;}
  if(path==='admin/open'){
   const minutes=Number(body.minutes);if(!Number.isInteger(minutes)||minutes<1||minutes>15)return json({error:'Vælg 1–15 minutter.'},400);
-  const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'Præmie til top 5').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
+  const opponent=body.opponent??DEFAULT_OPPONENT;if(!validKit(opponent))return json({error:'Vælg et holdnavn på 2–40 tegn og en trøjefarve, som tydeligt adskiller sig fra hvid.'},400);
+  const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'Præmie til top 5').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
  }
  if(path==='admin/close'){
   const {data:r}=await db().from('rounds').select('*').eq('id',body.roundId).single();if(!r||r.status!=='open')return json({error:'Runden er allerede lukket.'},400);
