@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {act,advance,createGame,formatTime,HEIGHT,position,WIDTH,type Game,type Stage,type Point} from '@/lib/game';
+import {act,advance,createGame,formatTime,HEIGHT,position,WIDTH,reasons,type Game,type Stage,type Point} from '@/lib/game';
 import type {OpponentKit} from '@/lib/team';
 export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit};
 export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
@@ -52,9 +52,10 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
       if(!f.intercepted) { const rx=f.to.x,ry=f.to.y-camera.current+490;ctx.strokeStyle=`rgba(228,131,49,${.12+.25*u})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(rx,ry,34+5*u,0,Math.PI*2);ctx.stroke(); }
       const a=f.via?(raw<.5?f.from:f.via):f.from;const b=f.via?(raw<.5?f.via:f.to):f.to;const leg=f.via?(raw<.5?raw*2:(raw-.5)*2):raw;const v=leg;const x=a.x+(b.x-a.x)*v,y=a.y+(b.y-a.y)*v-camera.current+490;ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();drawPuck(x,y);}
     if(g.impact){ctx.strokeStyle='#b4232a';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(g.impact.x,g.impact.y-camera.current+490,35,35*shapeScale,0,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#142323';ctx.beginPath();ctx.arc(g.impact.x+22,g.impact.y-camera.current+473,5,0,Math.PI*2);ctx.fill();}
+    if(g.dead&&session){ctx.save();ctx.fillStyle='rgba(11,36,26,.88)';ctx.fillRect(0,0,WIDTH,HEIGHT);ctx.fillStyle='#E48331';ctx.font='bold 13px Arial';ctx.textAlign='center';ctx.fillText('DIT FORSØG ER SLUT',WIDTH/2,HEIGHT/2-44);ctx.fillStyle='#fff';ctx.font='bold 29px Arial';ctx.fillText(reasons[g.dead],WIDTH/2,HEIGHT/2+4);ctx.fillStyle='#c8d8cc';ctx.font='14px Arial';ctx.fillText('Resultatet bliver gemt…',WIDTH/2,HEIGHT/2+38);ctx.restore();}
     if(g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('DU SPILLER FOR BULLDOGS · FREMAD ↑',200,92);}
   };
-  const finish=()=>{if(!ended){ended=true;callback.current({...g,events:[...g.events]});}};
+  const finish=()=>{if(!ended){ended=true;window.setTimeout(()=>callback.current({...g,events:[...g.events]}),1100);}};
   let lastPasser:Point|null=null;
   const loop=(now:number)=>{
    if(stopped)return;
