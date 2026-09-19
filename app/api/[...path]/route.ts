@@ -16,7 +16,9 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
  const path=(await params).path.join('/');
  if(path==='board'||path==='screen-board'){
   if(path==='screen-board' && process.env.LEADERBOARD_ACCESS_CODE && !(await leaderboard()))return json({error:'Storskærmen kræver adgangskode.'},401);
-  if(!configured())return json({configured:false,round:null,entries:[],participants:0,serverTime:new Date().toISOString()});
+  if(!configured())return path==='screen-board'
+   ? json({error:'Supabase er ikke forbundet på denne Vercel-deployment. Kontrollér SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY og SESSION_SECRET i Production Environment.'},503)
+   : json({configured:false,round:null,entries:[],participants:0,serverTime:new Date().toISOString()});
   const board=await rpc('public_board');
   return NextResponse.json({...board,configured:true},{headers:{'Cache-Control':'public, max-age=0, s-maxage=2, stale-while-revalidate=3'}});
  }
@@ -45,8 +47,11 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
 }
 export async function POST(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
  try {
- const origin=req.headers.get('origin');const expected=process.env.APP_ORIGIN||req.nextUrl.origin;
- if(origin!==expected)return json({error:'Ugyldig afsender.'},403);
+ const origin=req.headers.get('origin');
+ const configuredOrigin=process.env.APP_ORIGIN?.replace(/\/$/,'');
+ const requestOrigin=req.nextUrl.origin.replace(/\/$/,'');
+ const sameOrigin=origin===requestOrigin || (!origin && req.headers.get('sec-fetch-site')==='same-origin');
+ if(configuredOrigin ? origin!==configuredOrigin : !sameOrigin)return json({error:'Ugyldig afsender.'},403);
  if(!configured())return fail(new Error('NOT_CONFIGURED'));
  if(Number(req.headers.get('content-length')||0)>300000)return json({error:'For mange data.'},413);
  const raw=await req.text();if(raw.length>300000)return json({error:'For mange data.'},413);

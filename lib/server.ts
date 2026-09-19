@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, createHash, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
-export const configured=()=>!!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SESSION_SECRET && process.env.SESSION_SECRET.length>=32);
-export function db(){if(!configured())throw new Error('NOT_CONFIGURED');return createClient(process.env.SUPABASE_URL!,process.env.SUPABASE_SERVICE_ROLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}});}
+const supabaseUrl=()=>process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey=()=>process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_KEY;
+export const configured=()=>!!(supabaseUrl() && serviceKey() && process.env.SESSION_SECRET && process.env.SESSION_SECRET.length>=32);
+export function db(){if(!configured())throw new Error('NOT_CONFIGURED');return createClient(supabaseUrl()!,serviceKey()!,{auth:{persistSession:false,autoRefreshToken:false}});}
 export function hash(s:string){return createHash('sha256').update(s).digest('hex');}
 export function equal(a:string,b:string){return timingSafeEqual(Buffer.from(hash(a)),Buffer.from(hash(b)));}
 function sign(s:string){return createHmac('sha256',process.env.SESSION_SECRET!).update(s).digest('base64url');}
