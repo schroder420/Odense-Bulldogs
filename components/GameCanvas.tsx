@@ -13,16 +13,29 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
  useEffect(()=>{
   let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1,lastFrame=0,deadAt=0,frameNow=0;let previousStage:Stage|null=null,previousActive:Point|null=null;let renderedStage:Stage;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
   const lowPower=typeof navigator!=='undefined' && ((navigator.hardwareConcurrency||4)<=4 || (navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData===true);
-  const home=new Image(),away=new Image(),logo=new Image();home.src='/assets/home-skater.webp';away.src='/assets/opponent-skater.webp';logo.src='/assets/bulldogs-logo.png';
-  let awayArt:CanvasImageSource=away;
+  // To skridtfaser per hold. Hver spiller beholder sin egen fase, så staven aldrig hopper fra
+  // den ene side af kroppen til den anden midt i et skøjtetag.
+  const load=(src:string)=>{const image=new Image();image.src=src;return image;};
+  const homeGlide=load('/assets/bulldogs-glide.webp'),homeStride=load('/assets/bulldogs-stride.webp');
+  const awayGlide=load('/assets/opponent-glide.webp'),awayStride=load('/assets/opponent-stride.webp');
+  const logo=load('/assets/bulldogs-logo.png');
+  let awayGlideArt:CanvasImageSource=awayGlide,awayStrideArt:CanvasImageSource=awayStride;
+  // Sprite'erne er centreret på kroppen, ikke på staven, så spilleren står dér, hvor man trykker.
+  const SIZE=122;
+  const stridesFor=(id:string)=>id.charCodeAt(id.length-1)%2===1;
+  const art=(team:'home'|'away',stride:boolean):CanvasImageSource=>
+   team==='home'?(stride?homeStride:homeGlide):(stride?awayStrideArt:awayGlideArt);
   const g=createGame(session?.seed||1978,session?.limit||Infinity);game.current=g;camera.current=0;renderedStage=g.stage;
-  const loaded=Promise.all([home,away,logo].map(im=>im.decode()));
-  const skater=(point:Point,team:'home'|'away',alpha=1,angle=0)=>{
+  const loaded=Promise.all([homeGlide,homeStride,awayGlide,awayStride,logo].map(im=>im.decode()));
+  const skater=(point:Point,team:'home'|'away',stride=false,alpha=1,angle=0)=>{
     const x=point.x,y=point.y-camera.current+490;ctx.save();ctx.globalAlpha=alpha;
-    ctx.fillStyle='rgba(19,46,59,.16)';ctx.beginPath();ctx.ellipse(x,y+14,24,8,0,0,Math.PI*2);ctx.fill();
-    ctx.translate(x,y);ctx.rotate(angle);ctx.drawImage(team==='home'?home:awayArt,-53,-62*shapeScale,106,106*shapeScale);
+    ctx.fillStyle='rgba(19,46,59,.16)';ctx.beginPath();ctx.ellipse(x,y+17,25,8,0,0,Math.PI*2);ctx.fill();
+    ctx.translate(x,y);ctx.rotate(angle);
+    ctx.drawImage(art(team,stride),-SIZE/2,-SIZE*shapeScale/2,SIZE,SIZE*shapeScale);
     ctx.restore();
   };
+  // En lille drejning mod spillet. Nok til at give retning, ikke nok til at se forkert ud.
+  const lean=(x:number,towards:number,strength=900)=>Math.max(-.2,Math.min(.2,(towards-x)/strength));
   const drawPuck=(x:number,y:number)=>{
     ctx.save();ctx.fillStyle='rgba(12,24,24,.22)';ctx.beginPath();ctx.ellipse(x+2,y+3,7,4,0,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#11191a';ctx.beginPath();ctx.ellipse(x,y,6.5,3.8,0,0,Math.PI*2);ctx.fill();
@@ -47,15 +60,18 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
     ctx.save();ctx.translate(29,330);ctx.rotate(-Math.PI/2);ctx.fillStyle='rgba(24,73,46,.22)';ctx.font='bold 12px Arial';ctx.letterSpacing='3px';ctx.fillText('ODENSE BULLDOGS',0,0);ctx.restore();
     if(g.stage.bank){const b=g.stage.bank, p=g.stage.home.find(h=>h.id===b.target)!;const target=position(p,g.now);ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle='#d97a24';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(g.active.x,g.active.y-camera.current+490);ctx.lineTo(b.point.x,b.point.y-camera.current+490);ctx.lineTo(target.x,target.y-camera.current+490);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#E48331';ctx.fillRect(b.point.x-11,b.point.y-camera.current+454,22,72);ctx.fillStyle='#1b3122';ctx.textAlign='center';ctx.font='bold 11px Arial';ctx.fillText('BANDE',b.point.x===12?48:352,b.point.y-camera.current+449);ctx.restore();}
     const arrival=Math.min(1,Math.max(0,(g.now-g.readyAt)/300));
-    if(previousStage&&arrival<1){previousStage.home.forEach(p=>{if(p.id!==g.events.at(-1)?.target)skater(position(p,g.now),'home',1-arrival);});previousStage.away.forEach(p=>skater(position(p,g.now),'away',1-arrival));if(previousActive)skater(previousActive,'home',1-arrival);}
-    g.stage.home.forEach(p=>{const receiving=g.flight&&!g.flight.intercepted&&p.id===g.events.at(-1)?.target;skater(receiving?g.flight!.to:position(p,g.now),'home');});g.stage.away.forEach(p=>skater(position(p,g.now),'away'));
+    if(previousStage&&arrival<1){previousStage.home.forEach(p=>{if(p.id!==g.events.at(-1)?.target)skater(position(p,g.now),'home',stridesFor(p.id),1-arrival);});previousStage.away.forEach(p=>skater(position(p,g.now),'away',stridesFor(p.id),1-arrival));if(previousActive)skater(previousActive,'home',false,1-arrival);}
+    g.stage.home.forEach(p=>{const receiving=g.flight&&!g.flight.intercepted&&p.id===g.events.at(-1)?.target;const at=receiving?g.flight!.to:position(p,g.now);
+     skater(at,'home',stridesFor(p.id),1,lean(at.x,g.active.x));});
+    g.stage.away.forEach(p=>{const at=position(p,g.now);skater(at,'away',stridesFor(p.id),1,lean(at.x,g.active.x));});
     if(!g.flight&&g.step>0&&arrival<1){ctx.strokeStyle=`rgba(228,131,49,${.6*(1-arrival)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(g.active.x,g.active.y-camera.current+490,40+arrival*12,0,Math.PI*2);ctx.stroke();}
     const pressure=Math.min(1,Math.max(0,(g.now-g.readyAt)/(g.deadline-g.readyAt)));
-    skater({x:g.active.x+Math.sin(g.now/200)*3,y:g.active.y+120-pressure*83},'away');
-    if(!g.flight){const x=g.active.x,y=g.active.y-camera.current+490;ctx.strokeStyle='rgba(24,73,46,.14)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,40,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=`hsl(${120*(1-pressure)},65%,${pressure>.7?46:36}%)`;ctx.beginPath();ctx.arc(x,y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pressure));ctx.stroke();skater(g.active,'home',1,Math.sin(g.now/800)*.035);drawPuck(x+35,y-30);}
+    const chaser={x:g.active.x+Math.sin(g.now/200)*3,y:g.active.y+120-pressure*83};
+    skater(chaser,'away',false,1,lean(chaser.x,g.active.x,500));
+    if(!g.flight){const x=g.active.x,y=g.active.y-camera.current+490;ctx.strokeStyle='rgba(24,73,46,.14)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,40,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=`hsl(${120*(1-pressure)},65%,${pressure>.7?46:36}%)`;ctx.beginPath();ctx.arc(x,y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pressure));ctx.stroke();skater(g.active,'home',false,1,Math.sin(g.now/800)*.035);drawPuck(x+45,y-44*shapeScale);}
     else{const f=g.flight;const raw=Math.min(1,Math.max(0,(g.now-f.start)/(f.end-f.start)));const ease=(n:number)=>n*n*(3-2*n);const u=ease(raw);
       // The receiver is drawn once at the simulation's landing point.
-      skater(f.from,'home');
+      skater(f.from,'home',false,1,lean(f.from.x,f.to.x,700));
       if(!f.intercepted) { const rx=f.to.x,ry=f.to.y-camera.current+490;ctx.strokeStyle=`rgba(228,131,49,${.12+.25*u})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(rx,ry,34+5*u,0,Math.PI*2);ctx.stroke(); }
       const a=f.via?(raw<.5?f.from:f.via):f.from;const b=f.via?(raw<.5?f.via:f.to):f.to;const leg=f.via?(raw<.5?raw*2:(raw-.5)*2):raw;const v=leg;const x=a.x+(b.x-a.x)*v,y=a.y+(b.y-a.y)*v-camera.current+490;ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();drawPuck(x,y);}
     const since=deadAt?frameNow-deadAt:0;
@@ -90,7 +106,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
    // Billederne fortsaetter lidt efter doeden, saa aarsagen naar at blive set, foer skaermen toner ned.
    if(session&&(!g.dead||now-deadAt<MARK_FOR))frame=requestAnimationFrame(loop);
   };
-  loaded.then(()=>{if(stopped)return;if(kit)awayArt=tintOpponent(away,kit);start.current=performance.now();onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
+  loaded.then(()=>{if(stopped)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);}start.current=performance.now();onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
   const visibility=()=>{if(document.hidden&&session&&!g.dead){advance(g,Math.floor(performance.now()-start.current));if(!g.dead){g.dead='left';g.score=Math.floor(g.now);}finish();}};document.addEventListener('visibilitychange',visibility);
   return()=>{stopped=true;cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',visibility);};
  },[session,onReady,kitKey]);// eslint-disable-line react-hooks/exhaustive-deps

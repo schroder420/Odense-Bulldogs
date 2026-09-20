@@ -19,7 +19,7 @@ export const options={
 let joined=false;
 const headers={'Content-Type':'application/json',Origin:base};
 export function play(){
- if(!joined){http.get(base);http.get(`${base}/assets/home-skater.webp`);http.get(`${base}/assets/opponent-skater.webp`);const r=http.post(`${base}/api/join`,JSON.stringify({nickname:`Load-${__VU}`}),{headers,tags:{name:'join'}});if(!check(r,{'joined':r.status===200})){sleep(2);return;}joined=true;}
+ if(!joined){http.get(base);for(const sprite of ['bulldogs-glide','bulldogs-stride','opponent-glide','opponent-stride'])http.get(`${base}/assets/${sprite}.webp`);const r=http.post(`${base}/api/join`,JSON.stringify({nickname:`Load-${__VU}`}),{headers,tags:{name:'join'}});if(!check(r,{'joined':r.status===200})){sleep(2);return;}joined=true;}
  const start=http.post(`${base}/api/run/start`,JSON.stringify({version}),{headers,tags:{name:'start'}});
  if(!check(start,{'run started':start.status===200})){sleep(4);return;}
  const run=start.json();sleep(3.6); // Catch-only trace: 0 afleveringer, så scoren er ren overlevelsestid.

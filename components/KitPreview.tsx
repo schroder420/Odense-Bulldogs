@@ -2,9 +2,10 @@
 import {useEffect,useRef} from 'react';
 import type {OpponentKit} from '@/lib/team';
 import {tintOpponent} from '@/lib/sprites';
-// Previewet bruger praecis samme sprite og samme farvning som spillet, saa det personalet ser er det, isen viser.
+// Forfra-billedet viser troeje, aag, bukser og sokkestriber langt tydeligere end et billede ovenfra.
+// Det er den samme farvemester og den samme farvning som paa isen, saa farverne er garanteret ens.
 export default function KitPreview({kit}:{kit:OpponentKit}){
  const canvas=useRef<HTMLCanvasElement>(null);
- useEffect(()=>{let cancelled=false;const image=new Image();image.src='/assets/opponent-skater.webp';image.decode().then(()=>{if(cancelled)return;const ctx=canvas.current?.getContext('2d');if(!ctx)return;ctx.clearRect(0,0,180,180);ctx.drawImage(tintOpponent(image,kit),0,0,180,180);}).catch(()=>{});return()=>{cancelled=true;};},[kit.primary,kit.stripe]);
- return <canvas className="kit-preview" ref={canvas} width={180} height={180} role="img" aria-label={`Forhåndsvisning af ${kit.name}s dragt`}/>;
+ useEffect(()=>{let cancelled=false;const image=new Image();image.src='/assets/opponent-front.webp';image.decode().then(()=>{if(cancelled)return;const ctx=canvas.current?.getContext('2d');if(!ctx)return;ctx.clearRect(0,0,200,260);ctx.drawImage(tintOpponent(image,kit),-30,0,260,260);}).catch(()=>{});return()=>{cancelled=true;};},[kit.primary,kit.stripe]);
+ return <canvas className="kit-preview" ref={canvas} width={200} height={260} role="img" aria-label={`Forhåndsvisning af ${kit.name}s dragt`}/>;
 }

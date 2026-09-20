@@ -28,7 +28,8 @@ En QR-kode med `localhost` virker kun på samme computer. Efter publicering brug
 - Undertal tager en medspiller ud af opstillingen, men fjerner ikke modstandere. Der er altid mindst én fri afleveringsmulighed.
 - Modstanderens trøje- og stribefarve vælges af personalet før runden og farves ind på selve spillersprite'en, så holdene kan kendes fra hinanden på isen.
 - Personalet åbner runder, lukker for nye forsøg, skjuler navne og fastlåser top 5. Vindere får et personligt præmiebevis med QR-kode. Indløsning er atomisk i databasen og tillades kun én gang.
-- Hvid dragt uden sponsorer, leveret Bulldogs-logo og farverne #18492E, #B4232A og #E48331. To genererede spillersprites med gennemsigtig baggrund, optimeret til cirka 19 KB hver. Skrifttyper hostes lokalt.
+- Hvid dragt uden sponsorer, leveret Bulldogs-logo og farverne #18492E, #B4232A og #E48331. Fire spillersprites, to skridtfaser per hold, med gennemsigtig baggrund på cirka 12 KB hver. Skrifttyper hostes lokalt.
+- Modstandersprite'en er en **farvemester**: kraftigt mættet blå trøje og magenta kanter. De to farvetoner ligger langt fra hinanden og langt fra det sorte udstyr, så `lib/sprites.ts` kan bytte dem præcist til personalets valgte farver, mens hjelm, handsker, skøjter og stav aldrig bliver ramt.
 
 ## Opret klubbens konti og publicér
 
@@ -102,6 +103,14 @@ npm run build
 
 Tests dækker tidskurven, 500 seeds med hver 180 lovlige afleveringer, bandespil, ulovlige inputs, slutfløjt, resultatgenspilning og databaseforløbet med RLS, bedste tid, fastlåsning og én indløsning. Databasetesten kører rigtig PostgreSQL via PGlite lokalt; den erstatter ikke Supabase/Vercel-integrationstesten.
 
-Grafik: de to spillerbilleder er skabt med det indbyggede imagegen-værktøj. Præcise prompts findes i `public/assets/generation-prompts.txt`; originaler og optimerede WebP-filer ligger ved siden af. Logoet er leveret af brugeren. Trøjerne er en spilfortolkning set ovenfra, ikke officielle produktfotos.
+Grafik: spillerbillederne er genereret ud fra prompterne i `assets-source/generation-prompts-v3.txt`. Originalerne ligger i `assets-source/` og bliver **ikke** deployet; kun de optimerede WebP-filer i `public/assets/` sendes til browseren.
+
+```sh
+python3 scripts/prepare-sprites.py   # kræver Pillow
+```
+
+Scriptet fjerner løsrevne halvgennemsigtige klatter fra generatoren, centrerer hvert billede på spillerens krop i stedet for på staven, så trykområdet passer med figuren, og skalerer til 384 x 384 WebP.
+
+Hver spiller beholder sin egen skridtfase hele vejen. Faserne må ikke skiftes på den samme spiller, fordi staven ligger i hver sin side af kroppen i de to faser. Logoet er leveret af brugeren. Trøjerne er en spilfortolkning set ovenfra, ikke officielle produktfotos.
 
 Kilder kontrolleret under opbygning: [Odense Bulldogs](https://bulldogs.dk/), [Vercel Hobby-begrænsninger](https://vercel.com/docs/plans/hobby), [Supabase produktionstjek](https://supabase.com/docs/guides/deployment/going-into-prod), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security).

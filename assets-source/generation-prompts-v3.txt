@@ -1,0 +1,247 @@
+PROMPTS V3 · ODENSE BULLDOGS PAUSESPIL
+======================================
+
+HVORFOR V1 OG V2 FEJLEDE
+------------------------
+Fejlene i den nuværende home-skater.png er ikke tilfældige. De er de samme fire hver gang:
+
+1. Skøjterne vender bagud. Spilleren kører opad, men begge støvlers tå peger nedad
+   i billedet. Fødderne sidder reelt omvendt.
+2. Kun én hånd er på staven. Venstre arm ender ved hoften uden handske på skaftet.
+3. Staven går ind i kroppen. Skaftet forsvinder bag trøjen og kommer ikke ud igen.
+4. Stavbladet er oppe i luften som en fanestang i stedet for at ligge på isen foran
+   spilleren.
+
+Fælles for alle fire: det er stive genstande og ledforbindelser. Billedmodeller tegner
+"ishockeyspiller-stemning", ikke en rig med knogler og et stift skaft. Flere runder med
+samme fremgangsmåde giver samme fejl.
+
+DEN VIGTIGSTE ÆNDRING: GENERÉR SPILLEREN UDEN STAV
+--------------------------------------------------
+Staven er den ene ting, der fejler hver gang, og også den eneste ting, der er triviel at
+tegne i kode: et lige skaft fra den øverste hånd til bladet, med begge hænder på skaftet.
+Tages staven ud af billedet, forsvinder fejl 2, 3 og 4 permanent, og motivet bliver
+samtidig meget nemmere for modellen at ramme. Staven lægges på i canvas bagefter og kan
+så også dreje med afleveringsretningen.
+
+FØR DU GENERERER
+----------------
+Vedhæft altid et referencebillede. Ren tekst driver mod generiske skabeloner.
+Brug public/assets/home-skater.png som reference for stil, lys og dragt, og skriv i
+prompten at kameravinkel og benstilling skal følge teksten, ikke referencen.
+Kør små batches på 4 ad gangen og kassér hårdt.
+
+
+PROMPT A · BULLDOGS, GLIDEFASE, UDEN STAV
+-----------------------------------------
+A single male ice hockey player skating forward, seen from a camera mounted high above and
+slightly behind him, looking down at roughly 70 degrees from horizontal. From this angle you
+see the top and back of his white helmet, both shoulder pads from above, his upper back, the
+outside of both thighs, and both skates below him.
+
+He is gliding with both knees bent and both skates under his body, boots roughly parallel and
+angled slightly outward. The toe of each boot points away from the camera, in the direction he
+is travelling. The steel blade is visible as a thin bright line running lengthwise under each
+boot from heel to toe.
+
+Both arms are held forward and slightly down in front of his chest, elbows bent. Both hands wear
+dark hockey gloves and both fists are closed around empty air in a two handed grip position, the
+upper fist near his left hip and the lower fist about 30 cm further forward. His hands are empty.
+There is no hockey stick anywhere in this image.
+
+Uniform: white jersey with a burgundy #B4232A shoulder yoke, one burgundy and one thin gold band
+on each sleeve, dark forest green #18492E padded shorts, white socks with burgundy bands, white
+helmet with a dark cage, dark gloves and black skates. No sponsor marks, no team crest, no player
+number, no text anywhere.
+
+Clean 3D game asset render, soft neutral light from above, shading only on the body itself, no
+cast shadow and no ground surface. Whole figure centred in a square frame with even margin on all
+four sides, nothing cropped, strong readable silhouette at 70 pixels. Solid flat #FF00FF magenta
+background.
+
+
+PROMPT B · SAMME SPILLER, AFSÆTSFASE
+------------------------------------
+Brug prompt A, men erstat afsnittet om benene med:
+
+He is in mid stride. His left skate is planted flat under his body carrying his weight. His right
+leg is extended out to the side and behind him in a push, the right knee nearly straight, the right
+skate tilted onto its inside edge. The toe of each boot still points away from the camera along his
+direction of travel. The steel blade is visible as a thin bright line under each boot.
+
+Alt andet holdes ord for ord identisk, så de to billeder kan bruges som to faser af samme
+skridt.
+
+
+PROMPT C · MODSTANDEREN
+-----------------------
+Generér den ikke. Brug prompt A og B og farv dragten om i koden. To separate generationer giver
+to forskellige spillere med forskelligt lys, og det er derfor de nuværende to sprites ikke
+matcher hinanden. Farveskiftet ligger allerede i lib/sprites.ts.
+
+
+PROMPT D · HVIS DU HELLERE VIL RETTE DEN NUVÆRENDE SPRITE
+---------------------------------------------------------
+Til en billedredigeringsmodel, med home-skater.png vedhæftet. Kør én rettelse ad gangen og
+kontrollér imellem. Modeller klarer sjældent fire rettelser i ét hug.
+
+  1. "Keep everything in this image exactly as it is, but turn both ice skates around so the
+      toe of each boot points towards the top of the image, away from the viewer, in the
+      direction the player is skating. The blade must run under the boot from heel to toe."
+
+  2. "Keep everything as it is, but remove the hockey stick completely, including the part
+      hidden behind his body. Close his right glove into an empty fist."
+
+  3. "Keep everything as it is, but move his left arm forward so the left glove sits in front of
+      his chest next to the right glove, both fists closed and empty, about 30 cm apart."
+
+
+GODKENDELSESLISTE
+-----------------
+Kassér billedet, hvis blot ét punkt fejler. Det er hurtigere end at rette bagefter.
+
+  [ ] Begge skøjtetæer peger opad i billedet, væk fra kameraet
+  [ ] Klingen ses som én lige linje under hver støvle, ikke på siden
+  [ ] Begge knæ bøjer fremad, ikke indad eller udad
+  [ ] Begge handsker er synlige foran brystet, og begge næver er lukkede
+  [ ] Ingen stav nogen steder, heller ikke en stump bag kroppen
+  [ ] Ingen sponsorer, intet klubmærke, intet spillernummer, ingen tekst
+  [ ] Hele figuren er med, intet er skåret af kanten
+  [ ] Baggrunden er ensfarvet og rører ikke dragten
+  [ ] Skaleret ned til 70 px kan man stadig se, at det er en ishockeyspiller
+
+
+EFTERBEHANDLING
+---------------
+  1. Nøgl magenta-baggrunden ud til alfa.
+  2. Beskær til kvadrat med figuren centreret.
+  3. Skalér til 384 x 384 og gem som WebP, kvalitet 82. De nuværende ligger på ca. 17 KB.
+  4. Læg staven på i canvas. Geometrien ligger i lib/skater.ts: ét lige linjestykke fra
+     knoppen til bladet, med begge hænder på linjen.
+
+
+======================================================================
+TILLÆG · MODSTANDEREN OG FORFRA-VISNINGEN
+======================================================================
+
+REKKEFØLGEN ER VIGTIG
+---------------------
+De to nuværende sprites matcher ikke hinanden, fordi de er to uafhængige generationer.
+Forskelligt lys, forskellig krop, forskellig stilling. Gør det omvendt denne gang:
+
+  1. Generér FØRST modstanderen som farvemester (prompt E eller H nedenfor).
+  2. Når du har én, du er glad for, så giv PRÆCIS det billede til en
+     billedredigeringsmodel og bed om Bulldogs-versionen (prompt J).
+     Så er stilling, kamera og lys identiske, fordi det er det samme billede.
+  3. Kør aldrig to separate generationer og håb på, at de ligner hinanden.
+
+
+HVORFOR MODSTANDEREN SKAL GENERERES SOM FARVEMESTER
+---------------------------------------------------
+Personalet vælger modstanderens farver per kamp. Derfor skal dragten kunne skiftes i koden.
+Den nuværende sprite har en afdæmpet marineblå trøje, som er så lidt mættet, at den ikke kan
+skilles fra det sorte udstyr på farvetone. Jeg måtte i stedet finde den på blålighed og
+lysstyrke, hvilket virker, men er skrøbeligt.
+
+Generér i stedet dragten i to kraftigt mættede farver, der ligger langt fra hinanden og langt
+fra sort udstyr og hud. Så kan koden bytte dem præcist, og stoffets folder og skygger overlever.
+Blå og magenta er valgt, fordi ingen af delene findes i hjelm, handsker, skøjter eller stav.
+
+Dragtafsnittet, der bruges i prompt E, H og I:
+
+  Uniform: a strongly saturated pure blue #1668D8 jersey with a bright magenta #E0208C shoulder
+  yoke and two magenta bands on each sleeve, matching pure blue padded shorts, blue socks with
+  magenta bands, a black helmet with a dark cage, dark gloves and black skates. Both the blue and
+  the magenta must stay strong and clearly saturated, with visible fabric folds and shading, and
+  no other colour anywhere on the uniform. No sponsor marks, no team crest, no player number, no
+  text anywhere.
+
+
+PROMPT E · MODSTANDER, SPILSPRITE OVENFRA, GLIDEFASE, UDEN STAV
+---------------------------------------------------------------
+Tag prompt A ord for ord og udskift kun dragtafsnittet med farvemester-afsnittet ovenfor.
+Alt andet skal stå uændret: kameraet, benene, de tomme næver, sætningen om at der ikke er
+nogen stav, renderstilen og den magenta baggrund.
+
+Bemærk: baggrunden skal så IKKE være magenta, da dragten selv er magenta. Brug i stedet
+"Solid flat #00FF00 green background" i denne prompt.
+
+
+PROMPT F · MODSTANDER, SPILSPRITE OVENFRA, AFSÆTSFASE
+-----------------------------------------------------
+Prompt E med benafsnittet fra prompt B. Igen: intet andet må ændres.
+
+
+PROMPT G · BULLDOGS, SPILSPRITE OVENFRA
+---------------------------------------
+Lav den ikke som en ny generering. Brug prompt J på det færdige modstanderbillede.
+
+
+FORFRA-VISNINGEN
+----------------
+Bruges ikke i spillet. Den skal gøre det tydeligt, hvem man spiller for, og hvem man er oppe
+imod: i lobbyen før start, i holdforklaringen ved banen, i personalepanelet og på storskærmen.
+Her er staven med, fordi et menneske vælger det gode billede, og fordi en spiller set forfra er
+et motiv modellerne har set tusindvis af gange. Hitraten er langt højere end ovenfra.
+
+Brug 1024 x 1024 og skalér ned til 320 px til lobbyen og 640 px til storskærmen.
+
+
+PROMPT H · FORFRA, FARVEMESTER
+------------------------------
+A single male ice hockey player photographed from the front at chest height, standing squarely
+facing the camera in a ready stance, full body visible from the top of his helmet down to the
+blades of both skates. His knees are bent and his weight is low. His skates are shoulder width
+apart with the toes angled slightly outward and both blades flat on the ice.
+
+He holds a hockey stick with both hands. The upper hand grips the knob at hip height in front of
+his left hip. The lower hand grips the shaft about 40 cm further down. The blade rests flat on the
+ice in front of his right skate. The shaft is one single straight rigid piece from the knob to the
+blade, and the whole stick stays in front of his body at all times. No part of the shaft passes
+behind his torso, his arms or his legs.
+
+He faces the camera through a dark cage.
+
+[dragtafsnittet fra farvemesteren indsættes her]
+
+Clean 3D game asset render, soft neutral studio light from the front and slightly above, shading
+only on the body itself, no cast shadow and no ground surface. Whole figure centred in a square
+frame with even margin on all four sides, nothing cropped. Solid flat #00FF00 green background.
+
+
+PROMPT I · FORFRA, HALVPROFIL
+-----------------------------
+Samme som prompt H, men erstat første sætning med:
+
+  A single male ice hockey player photographed from the front at chest height, his body turned
+  about 20 degrees to his own left while his head stays turned towards the camera, full body
+  visible from the top of his helmet down to the blades of both skates.
+
+Giver et mindre stift billede til lobbyen. Behold staveafsnittet uændret.
+
+
+PROMPT J · BULLDOGS-VERSIONEN AF ET FÆRDIGT BILLEDE
+---------------------------------------------------
+Til en billedredigeringsmodel med det godkendte modstanderbillede vedhæftet:
+
+  "Keep this image exactly as it is. Do not change the pose, the camera angle, the body, the
+   lighting, the shadows, the helmet shape, the gloves, the skates, the stick or the background.
+   Change only the colours of the uniform fabric: make the jersey and the padded shorts white,
+   put a burgundy #B4232A yoke across the shoulders, put one burgundy and one thin gold band on
+   each sleeve, make the socks white with burgundy bands, and make the helmet white. Keep every
+   fold and every shadow in the fabric exactly where it is."
+
+Får du et billede, hvor stillingen har flyttet sig, så kassér det. Hele pointen er, at de to
+hold er den samme spiller.
+
+
+GODKENDELSESLISTE, FORFRA-VISNINGEN
+-----------------------------------
+  [ ] Skaftet er én lige linje fra knop til blad, uden knæk
+  [ ] Begge hænder er på skaftet, og man kan se begge handsker
+  [ ] Ingen del af staven forsvinder bag kroppen, armene eller benene
+  [ ] Bladet ligger fladt på isen, ikke oppe i luften
+  [ ] Begge skøjter står på klingen, ikke på siden af støvlen
+  [ ] Hele figuren er med, inklusive klingerne nederst
+  [ ] Ingen sponsorer, intet klubmærke, intet nummer, ingen tekst
+  [ ] Ved 320 px kan man stadig se, hvilket hold han spiller for
