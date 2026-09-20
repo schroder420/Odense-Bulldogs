@@ -6,12 +6,14 @@ import type {OpponentKit} from '@/lib/team';
 export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit};
 // Doedsfeedback: banen bliver staaende, aarsagen markeres, og foerst derefter toner resultatskaermen frem.
 const MARK_FOR=1100,FADE_FROM=480,FADE_OVER=420;
+// Lobbyens panel dækker den nederste del af banen, så demoen skubbes op i den synlige strimmel.
+const LOBBY_CAMERA=360;
 export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
  const canvas=useRef<HTMLCanvasElement>(null);const game=useRef<Game|null>(null);const camera=useRef(0);const start=useRef(0);const callback=useRef(onEnd);callback.current=onEnd;
  const [hud,setHud]=useState({time:0,passes:0,points:0,short:false,step:0,flight:false});const [assetError,setAssetError]=useState(false);
  const kit=session?.opponent||opponent;const kitKey=`${kit?.primary||''}${kit?.stripe||''}`;
  useEffect(()=>{
-  let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1,lastFrame=0,deadAt=0,frameNow=0;let previousStage:Stage|null=null,previousActive:Point|null=null;let renderedStage:Stage;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
+  let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1,lastFrame=0,deadAt=0,frameNow=0,idleStart=0;let previousStage:Stage|null=null,previousActive:Point|null=null;let renderedStage:Stage;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
   const lowPower=typeof navigator!=='undefined' && ((navigator.hardwareConcurrency||4)<=4 || (navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData===true);
   // To skridtfaser per hold. Hver spiller beholder sin egen fase, så staven aldrig hopper fra
   // den ene side af kroppen til den anden midt i et skøjtetag.
@@ -85,29 +87,39 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
       ctx.fillStyle='#fff';ctx.font='bold 29px Arial';ctx.fillText(reasons[g.dead],WIDTH/2,HEIGHT/2-6);
       ctx.fillStyle='#c8d8cc';ctx.font='14px Arial';ctx.fillText(causes[g.dead],WIDTH/2,HEIGHT/2+28);
       ctx.fillStyle='#93ab99';ctx.font='13px Arial';ctx.fillText('Resultatet bliver gemt…',WIDTH/2,HEIGHT/2+58);ctx.restore();}}
-    if(g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('DU SPILLER FOR BULLDOGS · FREMAD ↑',200,92);}
+    if(session&&g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('DU SPILLER FOR BULLDOGS · FREMAD ↑',200,92);}
   };
   const finish=()=>{if(!ended){ended=true;window.setTimeout(()=>callback.current({...g,events:[...g.events]}),MARK_FOR);}};
   let lastPasser:Point|null=null;
   const loop=(now:number)=>{
    if(stopped)return;
    frameNow=now;
-   if(session){advance(g,Math.floor(now-start.current));if(g.dead){if(!deadAt)deadAt=now;finish();}}
-   else{g.now=1000;}
+   if(session){advance(g,Math.floor(now-start.current));if(g.dead){if(!deadAt){deadAt=now;try{navigator.vibrate?.(g.dead==='whistle'?[40,70,40]:70);}catch{}}finish();}}
+   else{
+    // Stille demo i lobbyen: spillerne vugger, og jægeren lukker op og falder tilbage igen,
+    // så man kan se, hvad ringen betyder, før man selv starter. Intet kan dø her.
+    const elapsed=now-idleStart;
+    g.now=Math.floor(elapsed);
+    const closing=(1-Math.cos(elapsed/2600))/2;
+    g.readyAt=g.now-closing*3400;g.deadline=g.readyAt+3400;
+   }
    if(renderedStage!==g.stage){previousStage=renderedStage;previousActive=g.events.length?lastPasser:null;renderedStage=g.stage;}
    if(g.flight)lastPasser=g.flight.from;
    const progress=g.flight?Math.min(1,Math.max(0,(g.now-g.flight.start)/(g.flight.end-g.flight.start))):1;
    const eased=progress*progress*(3-2*progress);
-   const targetCamera=g.flight?g.flight.from.y+(g.flight.to.y-g.flight.from.y)*eased:g.active.y;
+   const targetCamera=!session?LOBBY_CAMERA:g.flight?g.flight.from.y+(g.flight.to.y-g.flight.from.y)*eased:g.active.y;
    const dt=lastFrame?Math.min(100,now-lastFrame):16.67;lastFrame=now;
    camera.current+=(targetCamera-camera.current)*(1-Math.exp(-dt/85));
    draw();
    if(now-lastHud>60){setHud({time:g.score,passes:g.passes,points:totalScore(g),short:g.stage.shortHanded,step:g.step,flight:!!g.flight});lastHud=now;}
    // Billederne fortsaetter lidt efter doeden, saa aarsagen naar at blive set, foer skaermen toner ned.
-   if(session&&(!g.dead||now-deadAt<MARK_FOR))frame=requestAnimationFrame(loop);
+   // frame nulstilles, naar sloejfen stopper, saa demoen kan startes igen ved fanevisning.
+   frame=(session?(!g.dead||now-deadAt<MARK_FOR):(!document.hidden&&!stillness))?requestAnimationFrame(loop):0;
   };
-  loaded.then(()=>{if(stopped)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);}start.current=performance.now();onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
-  const visibility=()=>{if(document.hidden&&session&&!g.dead){advance(g,Math.floor(performance.now()-start.current));if(!g.dead){g.dead='left';g.score=Math.floor(g.now);}finish();}};document.addEventListener('visibilitychange',visibility);
+  const stillness=typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  loaded.then(()=>{if(stopped)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);}start.current=performance.now();idleStart=start.current;onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
+  const visibility=()=>{if(!session&&!document.hidden&&!stillness&&!frame){idleStart=performance.now()-g.now;frame=requestAnimationFrame(loop);return;}
+   if(document.hidden&&session&&!g.dead){advance(g,Math.floor(performance.now()-start.current));if(!g.dead){g.dead='left';g.score=Math.floor(g.now);}finish();}};document.addEventListener('visibilitychange',visibility);
   return()=>{stopped=true;cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',visibility);};
  },[session,onReady,kitKey]);// eslint-disable-line react-hooks/exhaustive-deps
  function input(target:string,bank=false){const g=game.current;if(!session||!g||g.dead)return;act(g,{t:Math.floor(performance.now()-start.current),target,bank});}
