@@ -2,15 +2,34 @@ import { NextRequest,NextResponse } from 'next/server';
 import { randomUUID,randomInt } from 'node:crypto';
 import {admin,claimCode,configured,cookieOptions,db,equal,hash,leaderboard,player,rpc,ticket} from '@/lib/server';
 import {DEFAULT_OPPONENT,validKit,roundKit} from '@/lib/team';
-import {replay,GAME_VERSION} from '@/lib/game';
+import {replay,scorePasses,totalScore,GAME_VERSION} from '@/lib/game';
 export const runtime='nodejs';
 export const maxDuration=15;
 const json=(value:unknown,status=200)=>NextResponse.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
-function fail(error:unknown){const message=error instanceof Error?error.message:'';
- const known:Record<string,string>={NOT_CONFIGURED:'Konkurrencen er ikke forbundet endnu.',ROUND_CLOSED:'Der er lukket for nye forsøg.',TOO_FAST:'Vent et øjeblik, og prøv igen.',ROUND_FINAL:'Runden er afsluttet. Resultatet kom for sent.',RUN_REPLACED:'Et nyere forsøg er allerede startet.',WAIT_FOR_RUNS:'Vent på de sidste resultater.',INVALID_CLAIM:'Præmiekoden blev ikke fundet.',ALREADY_REDEEMED:'Præmien er allerede udleveret.',WINNERS_CHANGED:'Listen ændrede sig. Opdater og prøv igen.'};
+// Supabase-fejl er almindelige objekter, ikke Error. Uden det her forsvandt årsagen, og alt blev "kunne ikke gennemføres".
+function describe(error:unknown){
+ const coded=(value:unknown)=>typeof (value as {code?:unknown})?.code==='string'?(value as {code:string}).code:'';
+ if(error instanceof Error)return {message:error.message,code:coded(error)};
+ if(error&&typeof error==='object'){const e=error as {message?:unknown;code?:unknown;details?:unknown;hint?:unknown};
+  return {message:[e.message,e.details,e.hint].filter(v=>typeof v==='string').join(' · '),code:coded(e)};}
+ return {message:typeof error==='string'?error:'',code:''};
+}
+const known:Record<string,string>={NOT_CONFIGURED:'Konkurrencen er ikke forbundet endnu.',ROUND_CLOSED:'Der er lukket for nye forsøg.',TOO_FAST:'Vent et øjeblik, og prøv igen.',ROUND_FINAL:'Runden er afsluttet. Resultatet kom for sent.',RUN_REPLACED:'Et nyere forsøg er allerede startet.',WAIT_FOR_RUNS:'Vent på de sidste resultater.',INVALID_CLAIM:'Præmiekoden blev ikke fundet.',ALREADY_REDEEMED:'Præmien er allerede udleveret.',WINNERS_CHANGED:'Listen ændrede sig. Opdater og prøv igen.',INVALID_TIME:'Tiden kunne ikke godkendes.',INVALID_ROUND:'Runden kan ikke afsluttes igen.',PLAYER_MISSING:'Vælg først et spillernavn.',RUN_MISSING:'Forsøget blev ikke fundet.'};
+// Postgres-koder oversat til noget, personalet kan handle på. Ingen rå fejltekst forlader serveren.
+const codes:Record<string,{text:string;status:number}>={
+ '23505':{text:'Der findes allerede en runde, som ikke er afsluttet. Luk og fastlås den først.',status:409},
+ '42703':{text:'Databasen mangler en opdatering. Kør supabase/003_screen_control.sql og 004_total_score.sql i Supabase.',status:503},
+ 'PGRST204':{text:'Databasen mangler en opdatering. Kør supabase/003_screen_control.sql og 004_total_score.sql i Supabase.',status:503},
+ 'PGRST202':{text:'Databasen mangler en opdatering. Kør supabase/004_total_score.sql i Supabase.',status:503},
+ '42883':{text:'Databasen mangler en opdatering. Kør supabase/004_total_score.sql i Supabase.',status:503},
+ '42P01':{text:'Databasen mangler tabellerne. Kør supabase/001_initial.sql og fremefter i Supabase.',status:503}};
+function fail(error:unknown){
+ const {message,code}=describe(error);
  const key=Object.keys(known).find(k=>message.includes(k));
- if(!key)console.error('API request failed:',message.slice(0,180));
- return json({error:key?known[key]:'Handlingen kunne ikke gennemføres. Prøv igen.'},key==='NOT_CONFIGURED'?503:400);
+ if(key)return json({error:known[key]},key==='NOT_CONFIGURED'?503:400);
+ console.error('API request failed:',code,message.slice(0,300));
+ const mapped=codes[code];
+ return json({error:mapped?mapped.text:'Handlingen kunne ikke gennemføres. Prøv igen.'},mapped?mapped.status:400);
 }
 export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[]}>}){
  try{
@@ -29,11 +48,11 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
   const id=await player();if(!id)return json(null);
   const client=db();const {data:p,error}=await client.from('participants').select('id,nickname').eq('id',id).single();if(error)return json(null);
   const {data:r}=await client.from('rounds').select('*').order('starts_at',{ascending:false}).limit(1).maybeSingle();
-  if(!r)return json({...p,best:0,rank:null,claim:null});
-  const {data:score}=await client.from('scores').select('score_ms').eq('round_id',r.id).eq('participant_id',id).maybeSingle();
+  if(!r)return json({...p,best:0,bestTime:0,bestPasses:0,rank:null,claim:null});
+  const {data:score}=await client.from('scores').select('score_points,time_ms,passes').eq('round_id',r.id).eq('participant_id',id).maybeSingle();
   const {data:prize}=await client.from('prizes').select('rank,redeemed_at,round_id,rounds(prize,title)').eq('participant_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
   const prizeRound=prize?.rounds as unknown as {prize:string;title:string}|undefined;
-  return json({...p,best:score?.score_ms||0,rank:prize&&prize.round_id===r.id?prize.rank:null,claim:prize?{code:claimCode(prize.round_id,id),rank:prize.rank,redeemed:!!prize.redeemed_at,prize:prizeRound?.prize||r.prize,roundTitle:prizeRound?.title||r.title}:null});
+  return json({...p,best:score?.score_points||0,bestTime:score?.time_ms||0,bestPasses:score?.passes||0,rank:prize&&prize.round_id===r.id?prize.rank:null,claim:prize?{code:claimCode(prize.round_id,id),rank:prize.rank,redeemed:!!prize.redeemed_at,prize:prizeRound?.prize||r.prize,roundTitle:prizeRound?.title||r.title}:null});
  }
  if(path==='admin'){
   if(!configured())return json({configured:false,authenticated:false});
@@ -77,7 +96,8 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   const limit=Math.floor(new Date(run.rounds.cutoff_at).getTime()-new Date(run.started_at).getTime());
   const validated=replay(Number(run.seed),body.events,body.end,limit,body.abandoned===true,run.game_version??1);
   if(validated.score>Date.now()-new Date(run.started_at).getTime()+1000)return json({error:'Tiden kunne ikke godkendes.'},400);
-  return json(await rpc('finish_run',{p_run:run.id,p_player:id,p_score:validated.score}));
+  // Serveren regner selv scoren ud af det replayede forløb. Klienten sender kun sine tryk.
+  return json(await rpc('finish_run',{p_run:run.id,p_player:id,p_points:totalScore(validated),p_time:validated.score,p_passes:scorePasses(validated)}));
  }
  if(path==='admin/login'){
   if(!process.env.ADMIN_PASSWORD||process.env.ADMIN_PASSWORD.length<16)return json({error:'Personalets adgang er ikke sat op endnu.'},503);
@@ -96,9 +116,23 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
  }
  if(!path.startsWith('admin/')||!await admin())return json({error:'Log ind som personale.'},401);
  if(path==='admin/logout'){const response=json({ok:true});response.cookies.delete('bulldogs-admin');return response;}
+ if(path==='admin/screen'){
+  const modes=['leaderboard','rules','info','winners'];
+  if(!modes.includes(body.mode)||typeof body.title!=='string'||body.title.length>80||typeof body.text!=='string'||body.text.length>500||typeof body.pickup!=='string'||body.pickup.length>240)return json({error:'Kontrollér skærmvalg og teksternes længde.'},400);
+  const board=await rpc('public_board');
+  if(!board.round||board.round.id!==body.roundId)return json({error:'Runden er ændret. Opdater siden.'},409);
+  if(body.mode==='winners'&&board.round.status!=='final')return json({error:'Fastlås først vinderne.'},409);
+  const {data,error}=await db().from('rounds').update({screen_mode:body.mode,screen_title:body.title.trim(),screen_body:body.text.trim(),pickup_instructions:body.pickup.trim()}).eq('id',body.roundId).eq('status',board.round.status).select('id').maybeSingle();
+  if(error){if(['PGRST204','42703'].includes(error.code))return json({error:'Storskærmsstyring mangler i databasen. Kør supabase/003_screen_control.sql i Supabase.'},503);throw error;}
+  if(!data)return json({error:'Runden ændrede sig. Prøv igen.'},409);
+  return json({ok:true});
+ }
  if(path==='admin/open'){
   const minutes=Number(body.minutes);if(!Number.isInteger(minutes)||minutes<1||minutes>15)return json({error:'Vælg 1–15 minutter.'},400);
   const opponent=body.opponent??DEFAULT_OPPONENT;if(!validKit(opponent))return json({error:'Vælg et holdnavn på 2–40 tegn og en trøjefarve, som tydeligt adskiller sig fra hvid.'},400);
+  const {data:unfinished,error:lookupError}=await db().from('rounds').select('id,status').neq('status','final').limit(1).maybeSingle();
+  if(lookupError)throw lookupError;
+  if(unfinished)return json({error:'Der kører allerede en runde. Luk for nye forsøg, fastlås vinderne, og åbn så en ny.'},409);
   const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'Præmie til top 5').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
  }
  if(path==='admin/close'){

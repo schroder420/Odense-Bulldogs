@@ -15,4 +15,5 @@ export async function admin(){return verify((await cookies()).get('bulldogs-admi
 export async function leaderboard(){return verify((await cookies()).get('bulldogs-leaderboard')?.value,'leaderboard')==='screen';}
 export function claimCode(round:string,id:string){return createHmac('sha256',process.env.SESSION_SECRET!).update(`prize:${round}:${id}`).digest('hex').slice(0,24).toUpperCase();}
 export const cookieOptions={httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict' as const,path:'/'};
-export async function rpc(name:string,args:Record<string,unknown>={}){const {data,error}=await db().rpc(name,args);if(error)throw new Error(error.message);return data;}
+// Postgres-koden følger med, så API'et kan oversætte fx manglende migration til en brugbar besked.
+export async function rpc(name:string,args:Record<string,unknown>={}){const {data,error}=await db().rpc(name,args);if(error)throw Object.assign(new Error(error.message),{code:error.code,details:error.details,hint:error.hint});return data;}

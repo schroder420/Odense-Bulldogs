@@ -20,10 +20,13 @@ En QR-kode med `localhost` virker kun på samme computer. Efter publicering brug
 - Automatisk bevægelse, fremadrettede afleveringer, modstandere, afskæringer, synligt bandespil og korte undertalssekvenser.
 - Tre rolige første modtagere; de første to afleveringer har ingen forsvarere i afleveringsbanen. Modstandere har altid en anden dragt.
 - Tidsfrist: `max(1000, 3500 × 0.8 ^ floor(tid_i_sekunder / 10))` millisekunder. Tidsfristen bestemmes ved modtagelse af pucken. Minimum 1 sekund fra 60 sekunder og frem.
-- Tryk på en hvid spiller eller en orange bandemarkering. Computer: 1–3, B. Skift væk fra fanen afslutter forsøget. Flight time er 240 ms direkte / 380 ms via banden.
+- Tryk på en hvid spiller eller en orange bandemarkering. Ingen tastaturgenveje; spillet styres kun med fingeren. Skift væk fra fanen afslutter forsøget. Afleveringen er undervejs 450 ms direkte og 600 ms via banden.
 - Serveren udsteder tilfældig bane og forsøgs-ID, genspiller input og beregner resultatet. Klienten sender ikke en vilkårlig highscore. Ét aktivt forsøg pr. deltager, og afsluttede forsøg kan ikke indsendes flere gange med nye resultater.
 - Live top 10, top 5 fremhævet, permanent QR-kode, nedtælling og tilstand ved tabt forbindelse. Storskærmen opdateres hvert 2,5 sekund; fælles data har kort CDN-cache.
-- Flere forsøg, kun bedste tid tæller. Ved lighed vinder først opnåede tid, derefter stabil sortering efter deltager-ID.
+- **Samlet score = overlevelsestid i sekunder + 1 point per gennemført aflevering.** 24,82 sekunder og 11 afleveringer giver 35,82 point. Ingen presbonus.
+- Flere forsøg, kun bedste score tæller. Ved lighed vinder først opnåede score, derefter stabil sortering efter deltager-ID.
+- Undertal tager en medspiller ud af opstillingen, men fjerner ikke modstandere. Der er altid mindst én fri afleveringsmulighed.
+- Modstanderens trøje- og stribefarve vælges af personalet før runden og farves ind på selve spillersprite'en, så holdene kan kendes fra hinanden på isen.
 - Personalet åbner runder, lukker for nye forsøg, skjuler navne og fastlåser top 5. Vindere får et personligt præmiebevis med QR-kode. Indløsning er atomisk i databasen og tillades kun én gang.
 - Hvid dragt uden sponsorer, leveret Bulldogs-logo og farverne #18492E, #B4232A og #E48331. To genererede spillersprites med gennemsigtig baggrund, optimeret til cirka 19 KB hver. Skrifttyper hostes lokalt.
 
@@ -31,7 +34,16 @@ En QR-kode med `localhost` virker kun på samme computer. Efter publicering brug
 
 1. Brug en kontaktmail, klubben kontrollerer. En særskilt Gmail kan bruges; en klubmail er lettere at overdrage. Klubben bør eje gendannelse og tofaktorgodkendelse. Brug individuelle projektadgange frem for delte adgangskoder.
 2. Opret klubbens Supabase-organisation og et nyt projekt i EU, helst Frankfurt. Gem databaseadgangskoden i klubbens passwordmanager. Opret et særskilt stagingprojekt til test.
-3. Kør `supabase/001_initial.sql` én gang i projektets SQL-editor. Migrationen opretter tabeller, indekser og transaktioner. RLS er slået til, og `anon`/`authenticated` har ingen adgang til spildata eller serverfunktionerne.
+3. Kør migrationerne i rækkefølge i projektets SQL-editor. RLS er slået til, og `anon`/`authenticated` har ingen adgang til spildata eller serverfunktionerne.
+
+   | Fil | Hvad den gør |
+   | --- | --- |
+   | `supabase/001_initial.sql` | Tabeller, indekser, transaktioner og adgangskontrol |
+   | `supabase/002_opponent_kit.sql` | Modstanderens navn og farver samt spilversion på forsøg |
+   | `supabase/003_screen_control.sql` | Fjernstyring af storskærmens indhold |
+   | `supabase/004_total_score.sql` | Samlet score: `score_points`, `time_ms` og `passes` |
+
+   **Rækkefølgen ved udgivelse betyder noget.** Kør SQL'en først, deploy bagefter. Koden kalder `finish_run` med fem argumenter og læser `score_points`; uden 004 kan resultater ikke gemmes. Mangler en migration, svarer API'et med præcis hvilken fil der skal køres.
 4. Opret et Vercel-team ejet af klubben. Brug Pro til den kommercielle klubinstallation. Importér denne mappe via klubbens GitHub-repository, eller deploy med Vercel CLI. Framework: Next.js. Build: `npm run build`. Installer fra den medfølgende lockfil.
 5. Indstil disse **servermiljøvariabler** i Vercel. Ingen må begynde med `NEXT_PUBLIC_`:
 

@@ -5,6 +5,8 @@ import {check,sleep} from 'k6';
 import {Rate} from 'k6/metrics';
 const base=__ENV.BASE_URL;
 if(!base||__ENV.STAGING_ACK!=='yes')throw new Error('Set BASE_URL and STAGING_ACK=yes for an isolated staging deployment.');
+// Skal matche GAME_VERSION i lib/game.ts, ellers afviser serveren hvert forsøg med 409.
+const version=Number(__ENV.GAME_VERSION||3);
 const accepted=new Rate('results_accepted');
 export const options={
  noCookiesReset:true,
@@ -18,9 +20,9 @@ let joined=false;
 const headers={'Content-Type':'application/json',Origin:base};
 export function play(){
  if(!joined){http.get(base);http.get(`${base}/assets/home-skater.webp`);http.get(`${base}/assets/opponent-skater.webp`);const r=http.post(`${base}/api/join`,JSON.stringify({nickname:`Load-${__VU}`}),{headers,tags:{name:'join'}});if(!check(r,{'joined':r.status===200})){sleep(2);return;}joined=true;}
- const start=http.post(`${base}/api/run/start`,'{}',{headers,tags:{name:'start'}});
+ const start=http.post(`${base}/api/run/start`,JSON.stringify({version}),{headers,tags:{name:'start'}});
  if(!check(start,{'run started':start.status===200})){sleep(4);return;}
- const run=start.json();sleep(3.6); // Catch-only trace: high write load from short repeated runs.
+ const run=start.json();sleep(3.6); // Catch-only trace: 0 afleveringer, så scoren er ren overlevelsestid.
  const finish=http.post(`${base}/api/run/finish`,JSON.stringify({id:run.id,events:[],end:3500,abandoned:false}),{headers,tags:{name:'finish'}});
  accepted.add(finish.status===200);check(finish,{'score accepted':finish.status===200});
  http.get(`${base}/api/board`,{tags:{name:'board'}});http.get(`${base}/api/me`,{tags:{name:'me'}});sleep(1+Math.random()*2);
