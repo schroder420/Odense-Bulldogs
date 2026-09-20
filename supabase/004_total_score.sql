@@ -46,7 +46,10 @@ begin
  end if;
  if r.status='final' or now()>r.cutoff_at+interval '20 seconds' then raise exception 'ROUND_FINAL'; end if;
  if p_passes<0 or p_passes>6000 then raise exception 'INVALID_TIME'; end if;
- if p_time<0 or p_time>extract(epoch from (least(now()+interval '1 second',r.cutoff_at)-run.started_at))*1000 then raise exception 'INVALID_TIME'; end if;
+ -- started_at har mikrosekunder, men serveren regner forsoegets slutfrist ud fra tider afkortet
+ -- til hele millisekunder. Afkortningen goer serverens frist op til 1 ms laengere end databasens,
+ -- og uden ceil() ville naesten hvert eneste slutfloejt blive afvist som ugyldig tid.
+ if p_time<0 or p_time>ceil(extract(epoch from (least(now()+interval '1 second',r.cutoff_at)-run.started_at))*1000) then raise exception 'INVALID_TIME'; end if;
  -- Point må hverken være mindre end tiden eller mere end tiden plus et point per aflevering.
  if p_points<p_time or p_points>p_time+p_passes*1000 then raise exception 'INVALID_TIME'; end if;
  update runs set finished_at=now(),score_points=p_points,time_ms=p_time,passes=p_passes where id=p_run;

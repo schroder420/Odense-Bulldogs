@@ -3,6 +3,18 @@ import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
+import {act,advance,allowance,createGame,distanceToSegment,position,replay,scorePasses,totalScore,type Input} from '../lib/game';
+// Spiller sikre afleveringer, indtil konkurrencens sidste floejt afslutter forsoeget.
+function playToWhistle(seed:number,limit:number){
+ const game=createGame(seed,limit);const events:Input[]=[];
+ while(!game.dead){
+  const t=Math.ceil(game.readyAt+allowance(game.readyAt/1000)*.5);
+  if(t>=limit){advance(game,limit+1);break;}
+  const safe=game.stage.home.find(p=>game.stage.away.every(a=>distanceToSegment(position(a,t),game.active,position(p,t))>=25))!;
+  events.push({t,target:safe.id});act(game,{t,target:safe.id});advance(game,t+450);
+ }
+ return {game,events};
+}
 const migrations=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql'];
 async function migrate(db:PGlite){
  await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
@@ -56,5 +68,35 @@ test('samlet score rangerer, og databasen afviser point der ikke passer til forl
  await assert.rejects(db.query('select finish_run($1,$2,10000,30000,2)',[cheat,slow]),/INVALID_TIME/);
  // Tiden maa stadig ikke overstige den tid, der faktisk er gaaet.
  await assert.rejects(db.query('select finish_run($1,$2,900000,900000,0)',[cheat,slow]),/INVALID_TIME/);
+ }finally{await db.close();}
+});
+test('slutfloejt godkendes, selv naar forsoegets frist kun er praecis paa mikrosekundet',async()=>{
+ const db=new PGlite();try{
+ await migrate(db);
+ const onTime=randomUUID(),tooLong=randomUUID();
+ await db.query("insert into participants(id,nickname) values ($1,'Slutfloejt'),($2,'Forlaenget')",[onTime,tooLong]);
+ await db.query("insert into rounds(ends_at,cutoff_at) values(now()+interval '2 minutes',now()+interval '2 minutes 30 seconds')");
+ const start=async(id:string)=>(await db.query<{v:any}>('select start_run($1,99) v',[id])).rows[0].v.run.id as string;
+ const first=await start(onTime),second=await start(tooLong);
+ // started_at har mikrosekunder i Postgres. Konkurrencen er slut, og begge forsoeg loeb til sidste floejt.
+ await db.query("update runs set started_at=now()-interval '8.271843 seconds' where id in ($1,$2)",[first,second]);
+ await db.query("update rounds set status='closing',ends_at=now()-interval '30 seconds',cutoff_at=now()-interval '0.3 seconds'");
+ const row=(await db.query<{s:string;c:string}>('select run.started_at::text s,r.cutoff_at::text c from runs run join rounds r on r.id=run.round_id where run.id=$1',[first])).rows[0];
+ // Praecis den frist serveren udleverer til spilleren ved start: millisekunder, ikke mikrosekunder.
+ const limit=Math.floor(new Date(row.c).getTime()-new Date(row.s).getTime());
+ // Kør hele vejen: simulationen loeber til slutfloejt, serveren genspiller, databasen godkender.
+ const {game,events}=playToWhistle(99,limit);
+ assert.equal(game.dead,'whistle');
+ assert.equal(game.score,limit);
+ assert.ok(game.passes>0);
+ const validated=replay(99,events,game.score,limit);
+ assert.equal(validated.dead,'whistle');
+ assert.equal(validated.score,limit);
+ await db.query('select finish_run($1,$2,$3,$4,$5)',[first,onTime,totalScore(validated),validated.score,scorePasses(validated)]);
+ const board=(await db.query<{v:any}>('select public_board() v')).rows[0].v;
+ assert.equal(board.entries[0].score_points,totalScore(validated));
+ assert.equal(board.entries[0].time_ms,limit);
+ // En tid ud over forsoegets frist er stadig ugyldig.
+ await assert.rejects(db.query('select finish_run($1,$2,$3,$3,0)',[second,tooLong,limit+50]),/INVALID_TIME/);
  }finally{await db.close();}
 });
