@@ -15,8 +15,8 @@ export default function TeamKey({kit}:{kit:OpponentKit}){
   const load=(src:string,then:(image:HTMLImageElement)=>void)=>{
    const image=new Image();image.src=src;image.decode().then(()=>{if(!cancelled)then(image);}).catch(()=>{});
   };
-  load('/assets/bulldogs-glide.webp',image=>paint(home.current,image));
-  load('/assets/opponent-glide.webp',image=>paint(away.current,tintOpponent(image,kit)));
+  load('/assets/bulldogs-receive-v6.webp',image=>paint(home.current,image));
+  load('/assets/opponent-receive-v6.webp',image=>paint(away.current,tintOpponent(image,kit)));
   return()=>{cancelled=true;};},[kit.primary,kit.stripe]);
  return <div className="team-key">
   <span><canvas ref={home} width={BOX} height={BOX} aria-hidden="true"/><span><b>Bulldogs</b><small>DET ER DIG</small></span></span>

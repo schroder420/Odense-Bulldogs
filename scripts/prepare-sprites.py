@@ -20,7 +20,8 @@ SOURCE = ROOT / 'assets-source'          # originalerne, som IKKE bliver deploye
 ASSETS = ROOT / 'public' / 'assets'      # det spillet henter
 CANVAS = 1440   # plads omkring kroppen, så staven ikke bliver skåret af ved centrering
 OUTPUT = 384
-NAMES = ['bulldogs-glide', 'bulldogs-stride', 'opponent-glide', 'opponent-stride']
+NAMES = ['bulldogs-glide', 'bulldogs-stride', 'opponent-glide', 'opponent-stride',
+         'bulldogs-glide-v6', 'bulldogs-receive-v6', 'opponent-receive-v6']
 # Forfra-billeder bruges ikke i spillet, men i personalepanelet, hvor farverne vælges.
 # De beskæres til figuren og fylder rammen ud, så dragten kan ses ordentligt.
 FRONTS = ['opponent-front']
@@ -82,8 +83,12 @@ def prepare(name):
     cleaned.paste(im, (0, 0), keep)
     removed = before - sum(1 for v in cleaned.getchannel('A').getdata() if v > 24)
     cx, cy = body_centre(cleaned.getchannel('A'))
-    canvas = Image.new('RGBA', (CANVAS, CANVAS), (0, 0, 0, 0))
-    canvas.paste(cleaned, (round(CANVAS / 2 - cx), round(CANVAS / 2 - cy)))
+    # Front-facing sticks extend below the body anchor. Keep the entire blade inside the canvas.
+    bounds = cleaned.getchannel('A').getbbox()
+    extent = max(cx - bounds[0], bounds[2] - cx, cy - bounds[1], bounds[3] - cy)
+    side = max(CANVAS, int(extent * 2) + 24)
+    canvas = Image.new('RGBA', (side, side), (0, 0, 0, 0))
+    canvas.paste(cleaned, (round(side / 2 - cx), round(side / 2 - cy)))
     out = canvas.resize((OUTPUT, OUTPUT), Image.LANCZOS)
     target = ASSETS / f'{name}.webp'
     out.save(target, 'WEBP', quality=82, method=6)
