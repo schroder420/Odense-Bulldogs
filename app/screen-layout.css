@@ -1,0 +1,42 @@
+/* Screen regions are bounded by the viewport; ScreenFit measures copy instead of clipping it. */
+.broadcast.arena-page{height:100dvh;min-height:0;max-width:none;overflow:hidden;padding:0 2vw;display:grid;grid-template-rows:clamp(36px,9dvh,100px) minmax(0,1fr) clamp(28px,7dvh,76px)}
+.broadcast.arena-page>header{height:100%;min-height:0;flex-wrap:nowrap;padding:0;gap:12px}
+.broadcast>header .brand img{height:min(7dvh,68px);width:auto}
+.broadcast>header .brand{gap:10px}.broadcast>header .brand span{font-size:clamp(11px,2.2dvh,26px)}
+.broadcast>header .brand small{font-size:clamp(7px,1dvh,12px)}
+.broadcast .arena-status{font-size:clamp(8px,1.2dvh,14px);letter-spacing:.04em;min-width:0}
+.broadcast .arena-grid{height:100%;min-height:0;min-width:0;padding:1dvh 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,40%);grid-template-rows:minmax(0,1fr);gap:2vw}
+.screen-fit{position:relative;min-width:0;min-height:0;overflow:hidden}
+.screen-fit-content{position:absolute;top:50%;left:50%;transform-origin:center;display:flow-root}
+.broadcast .screen-fit .ranking,.broadcast .screen-fit .broadcast-content{height:auto;min-height:0;overflow:visible;display:block}
+.broadcast .screen-fit .ranking-title h1{font-size:56px}.broadcast .screen-fit .ranking-title{margin:0 0 18px}
+.broadcast .screen-fit .top-five{display:block}.broadcast .screen-fit .rank-row{min-height:76px;padding:10px 16px;gap:14px}
+.broadcast .screen-fit .rank-row.first{min-height:88px}.broadcast .screen-fit .rank-name{font-size:25px}
+.broadcast .screen-fit .rank-row strong{font-size:38px}.broadcast .screen-fit .rank-row.first strong{font-size:44px}
+.broadcast .screen-fit .next-five{margin:18px 0}.broadcast .screen-fit .ranking-foot{font-size:10px;gap:10px}
+.broadcast .screen-fit .alternate-copy h1{font-size:64px;overflow-wrap:anywhere}.broadcast .screen-fit .alternate-copy p{font-size:27px;max-width:none;overflow-wrap:anywhere}
+.broadcast .screen-fit .winners-reveal h1{font-size:64px}.broadcast .screen-fit .winner-prize{font-size:24px;overflow-wrap:anywhere}
+.broadcast .screen-fit .winner-list strong{font-size:28px}.broadcast .screen-fit .winner-list span{font-size:20px}
+.broadcast .screen-fit .pickup-guide p{font-size:22px}.broadcast .screen-fit .pickup-guide h2{font-size:28px}
+.broadcast .arena-bottom{min-height:0;height:100%;padding:0;gap:12px}.broadcast .arena-bottom>div{min-width:0}
+.broadcast .arena-bottom strong{font-size:clamp(10px,2dvh,26px);line-height:1.1;overflow-wrap:anywhere}
+.broadcast .arena-bottom>span{font-size:clamp(7px,1dvh,12px);letter-spacing:.03em;max-width:45%}
+.screen-qr-panel{container-type:size;min-width:0;min-height:0;background:#edf1e7;color:#102f21;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2cqh;text-align:center;padding:0}
+.screen-qr-panel h2{font-size:min(8cqw,7cqh);line-height:1;margin:0;max-width:96%;font-family:var(--heading)}
+.screen-qr-code{width:min(96cqw,74cqh);height:min(96cqw,74cqh);flex:none;animation:qr-frame 3.2s ease-in-out infinite;background:white;border-radius:4px}
+.screen-qr-code img{display:block;width:100%;height:100%}.screen-qr-panel p{font-size:min(3.5cqw,3cqh);line-height:1.2;margin:0;max-width:94%;overflow-wrap:anywhere}
+.qr-only-screen{position:fixed;inset:0;height:100dvh;background:white;display:grid;place-items:center;overflow:hidden}
+.qr-only-screen img{display:block;width:min(100vw,100dvh);height:min(100vw,100dvh)}
+.broadcast.screen-countdown{grid-template-rows:minmax(0,1fr)}.broadcast.screen-countdown .arena-grid{padding:2dvh 0}
+.broadcast.screen-countdown .screen-fit-content{height:100%}.broadcast.screen-countdown .broadcast-content{height:100%}
+.broadcast.screen-countdown .countdown-takeover strong{font-size:min(76dvh,55vw)}
+@media(max-aspect-ratio:3/4){
+ .broadcast .arena-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,62fr) minmax(0,38fr);gap:1dvh}
+ .screen-qr-panel{position:relative;align-items:flex-start;padding-left:3%;gap:3cqh}
+ .screen-qr-panel h2,.screen-qr-panel p{max-width:40%;font-size:min(5cqw,9cqh);text-align:left}
+ .screen-qr-panel h2{font-size:min(7cqw,16cqh)}
+ .screen-qr-code{position:absolute;right:2%;top:50%;transform:translateY(-50%);width:min(53cqw,96cqh);height:min(53cqw,96cqh)}
+ .broadcast .arena-status{letter-spacing:0}.broadcast>header .brand small{display:none}
+ .broadcast .arena-bottom>span{display:none}.broadcast .arena-bottom strong{font-size:clamp(10px,1.8dvh,20px)}
+ .broadcast.screen-countdown .countdown-takeover strong{font-size:min(55dvh,80vw)}
+}

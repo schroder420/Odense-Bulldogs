@@ -117,13 +117,13 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
  if(!path.startsWith('admin/')||!await admin())return json({error:'Log ind som personale.'},401);
  if(path==='admin/logout'){const response=json({ok:true});response.cookies.delete('bulldogs-admin');return response;}
  if(path==='admin/screen'){
-  const modes=['leaderboard','rules','info','winners'];
+  const modes=['leaderboard','rules','info','winners','qr'];
   if(!modes.includes(body.mode)||typeof body.title!=='string'||body.title.length>80||typeof body.text!=='string'||body.text.length>500||typeof body.pickup!=='string'||body.pickup.length>240)return json({error:'Kontrollér skærmvalg og teksternes længde.'},400);
   const board=await rpc('public_board');
   if(!board.round||board.round.id!==body.roundId)return json({error:'Runden er ændret. Opdater siden.'},409);
   if(body.mode==='winners'&&board.round.status!=='final')return json({error:'Fastlås først vinderne.'},409);
   const {data,error}=await db().from('rounds').update({screen_mode:body.mode,screen_title:body.title.trim(),screen_body:body.text.trim(),pickup_instructions:body.pickup.trim()}).eq('id',body.roundId).eq('status',board.round.status).select('id').maybeSingle();
-  if(error){if(['PGRST204','42703'].includes(error.code))return json({error:'Storskærmsstyring mangler i databasen. Kør supabase/003_screen_control.sql i Supabase.'},503);throw error;}
+  if(error){if(error.code==='23514'&&body.mode==='qr')return json({error:'QR-visningen kræver databaseopdateringen 005_qr_screen.sql.'},503);if(['PGRST204','42703'].includes(error.code))return json({error:'Storskærmsstyring mangler i databasen. Kør supabase/003_screen_control.sql i Supabase.'},503);throw error;}
   if(!data)return json({error:'Runden ændrede sig. Prøv igen.'},409);
   return json({ok:true});
  }

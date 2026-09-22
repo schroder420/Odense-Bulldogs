@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {act,advance,causes,createGame,formatScore,formatTime,HEIGHT,position,totalScore,WIDTH,reasons,type Game,type Stage,type Point} from '@/lib/game';
 import {tintOpponent} from '@/lib/sprites';
+import {waitingPose,puckOffset,endpointWeight,type Pose} from '@/lib/skater-pose';
 import type {OpponentKit} from '@/lib/team';
 export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit};
 // Doedsfeedback: banen bliver staaende, aarsagen markeres, og foerst derefter toner resultatskaermen frem.
@@ -29,11 +30,17 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
   const art=(team:'home'|'away',stride:boolean):CanvasImageSource=>
    team==='home'?(stride?homeStride:homeGlide):(stride?awayStrideArt:awayGlideArt);
   const g=createGame(session?.seed||1978,session?.limit||Infinity);game.current=g;camera.current=0;renderedStage=g.stage;
+  let landing:Pose={front:0,mirror:false,angle:0,stride:false};
+  let flightStamp=-1,launch=landing,receiver=landing;
+  const activePose=(time:number):Pose=>{
+    const blend=g.step>0?Math.max(0,1-(time-g.readyAt)/300):0;
+    return {...landing,front:landing.front*blend,angle:landing.angle*blend+Math.sin(time/800)*.035*(1-blend)};
+  };
   const loaded=Promise.all([homeGlide,homeStride,awayGlide,awayStride,homeReceive,awayReceive,logo].map(im=>im.decode()));
-  const skater=(point:Point,team:'home'|'away',stride=false,alpha=1,angle=0,front=0)=>{
+  const skater=(point:Point,team:'home'|'away',stride=false,alpha=1,angle=0,front=0,mirror=false)=>{
     const x=point.x,y=point.y-camera.current+490;ctx.save();ctx.globalAlpha=alpha;
     ctx.fillStyle='rgba(19,46,59,.16)';ctx.beginPath();ctx.ellipse(x,y+17,25,8,0,0,Math.PI*2);ctx.fill();
-    ctx.translate(x,y);ctx.rotate(angle);
+    ctx.translate(x,y);ctx.rotate(angle);ctx.scale(mirror?-1:1,1);
     // Both views share a body-centred anchor. Crossfade on reception instead of spinning a flat sprite.
     if(front<1){ctx.globalAlpha=alpha*(1-front);ctx.drawImage(art(team,stride),-SIZE/2,-SIZE*shapeScale/2,SIZE,SIZE*shapeScale);}
     if(front>0){ctx.globalAlpha=alpha*front;ctx.drawImage(team==='home'?homeReceive:awayReceiveArt,-SIZE/2,-SIZE*shapeScale/2,SIZE,SIZE*shapeScale);}
@@ -65,20 +72,26 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
     ctx.save();ctx.translate(29,330);ctx.rotate(-Math.PI/2);ctx.fillStyle='rgba(24,73,46,.22)';ctx.font='bold 12px Arial';ctx.letterSpacing='3px';ctx.fillText('ODENSE BULLDOGS',0,0);ctx.restore();
     if(g.stage.bank){const b=g.stage.bank, p=g.stage.home.find(h=>h.id===b.target)!;const target=position(p,g.now);ctx.save();ctx.setLineDash([5,6]);ctx.strokeStyle='#d97a24';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(g.active.x,g.active.y-camera.current+490);ctx.lineTo(b.point.x,b.point.y-camera.current+490);ctx.lineTo(target.x,target.y-camera.current+490);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#E48331';ctx.fillRect(b.point.x-11,b.point.y-camera.current+454,22,72);ctx.fillStyle='#1b3122';ctx.textAlign='center';ctx.font='bold 11px Arial';ctx.fillText('BANDE',b.point.x===12?48:352,b.point.y-camera.current+449);ctx.restore();}
     const arrival=Math.min(1,Math.max(0,(g.now-g.readyAt)/300));
-    if(previousStage&&arrival<1){previousStage.home.forEach(p=>{if(p.id!==g.events.at(-1)?.target)skater(position(p,g.now),'home',stridesFor(p.id),1-arrival,0,1);});previousStage.away.forEach(p=>skater(position(p,g.now),'away',stridesFor(p.id),1-arrival,0,1));if(previousActive)skater(previousActive,'home',false,1-arrival);}
+    if(g.flight&&flightStamp!==g.flight.start){flightStamp=g.flight.start;launch=activePose(g.flight.start);receiver=waitingPose(g.events.at(-1)!.target,g.flight.to.x,g.flight.from.x);}
+    const drawPose=(at:Point,team:'home'|'away',pose:Pose,alpha=1)=>skater(at,team,pose.stride,alpha,pose.angle,pose.front,pose.mirror);
+    if(previousStage&&arrival<1){previousStage.home.forEach(p=>{if(p.id!==g.events.at(-1)?.target){const at=position(p,g.now);drawPose(at,'home',waitingPose(p.id,at.x,previousActive?.x??g.active.x),1-arrival);}});previousStage.away.forEach(p=>{const at=position(p,g.now);drawPose(at,'away',waitingPose(p.id,at.x,previousActive?.x??g.active.x),1-arrival);});if(previousActive)drawPose(previousActive,'home',launch,1-arrival);}
     g.stage.home.forEach(p=>{const receiving=g.flight&&!g.flight.intercepted&&p.id===g.events.at(-1)?.target;const at=receiving?g.flight!.to:position(p,g.now);
-     skater(at,'home',stridesFor(p.id),1,lean(at.x,g.active.x),1);});
-    g.stage.away.forEach(p=>{const at=position(p,g.now);skater(at,'away',stridesFor(p.id),1,lean(at.x,g.active.x),1);});
+     drawPose(at,'home',receiving?receiver:waitingPose(p.id,at.x,g.active.x));});
+    g.stage.away.forEach(p=>{const at=position(p,g.now);drawPose(at,'away',waitingPose(p.id,at.x,g.active.x));});
     if(!g.flight&&g.step>0&&arrival<1){ctx.strokeStyle=`rgba(228,131,49,${.6*(1-arrival)})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(g.active.x,g.active.y-camera.current+490,40+arrival*12,0,Math.PI*2);ctx.stroke();}
     const pressure=Math.min(1,Math.max(0,(g.now-g.readyAt)/(g.deadline-g.readyAt)));
     const chaser={x:g.active.x+Math.sin(g.now/200)*3,y:g.active.y+120-pressure*83};
     skater(chaser,'away',false,1,lean(chaser.x,g.active.x,500));
-    if(!g.flight){const x=g.active.x,y=g.active.y-camera.current+490;ctx.strokeStyle='rgba(24,73,46,.14)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,40,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=`hsl(${120*(1-pressure)},65%,${pressure>.7?46:36}%)`;ctx.beginPath();ctx.arc(x,y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pressure));ctx.stroke();skater(g.active,'home',false,1,Math.sin(g.now/800)*.035,g.step>0?1-arrival:0);drawPuck(x+45,y-44*shapeScale);}
+    if(!g.flight){const x=g.active.x,y=g.active.y-camera.current+490;ctx.strokeStyle='rgba(24,73,46,.14)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,40,0,Math.PI*2);ctx.stroke();ctx.strokeStyle=`hsl(${120*(1-pressure)},65%,${pressure>.7?46:36}%)`;ctx.beginPath();ctx.arc(x,y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-pressure));ctx.stroke();const pose=activePose(g.now);drawPose(g.active,'home',pose);const offset=puckOffset(pose,shapeScale);drawPuck(x+offset.x,y+offset.y);}
     else{const f=g.flight;const raw=Math.min(1,Math.max(0,(g.now-f.start)/(f.end-f.start)));const ease=(n:number)=>n*n*(3-2*n);const u=ease(raw);
       // The receiver is drawn once at the simulation's landing point.
-      skater(f.from,'home',false,1,lean(f.from.x,f.to.x,700));
+      drawPose(f.from,'home',launch);
       if(!f.intercepted) { const rx=f.to.x,ry=f.to.y-camera.current+490;ctx.strokeStyle=`rgba(228,131,49,${.12+.25*u})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(rx,ry,34+5*u,0,Math.PI*2);ctx.stroke(); }
-      const a=f.via?(raw<.5?f.from:f.via):f.from;const b=f.via?(raw<.5?f.via:f.to):f.to;const leg=f.via?(raw<.5?raw*2:(raw-.5)*2):raw;const v=leg;const x=a.x+(b.x-a.x)*v,y=a.y+(b.y-a.y)*v-camera.current+490;ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();drawPuck(x,y);}
+      const a=f.via?(raw<.5?f.from:f.via):f.from;const b=f.via?(raw<.5?f.via:f.to):f.to;const leg=f.via?(raw<.5?raw*2:(raw-.5)*2):raw;const v=leg;
+      const fromOffset=puckOffset(launch,shapeScale),toOffset=puckOffset(receiver,shapeScale);
+      const startWeight=endpointWeight(raw),endWeight=f.intercepted?0:endpointWeight(1-raw);
+      const x=a.x+(b.x-a.x)*v+fromOffset.x*startWeight+toOffset.x*endWeight,y=a.y+(b.y-a.y)*v-camera.current+490+fromOffset.y*startWeight+toOffset.y*endWeight;
+      ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();drawPuck(x,y);}
     const since=deadAt?frameNow-deadAt:0;
     const spot=g.dead?blame():null;
     if(spot){const pulse=.5+.5*Math.sin(since/95);const y=spot.y-camera.current+490;
@@ -106,7 +119,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
     const closing=(1-Math.cos(elapsed/2600))/2;
     g.readyAt=g.now-closing*3400;g.deadline=g.readyAt+3400;
    }
-   if(renderedStage!==g.stage){previousStage=renderedStage;previousActive=g.events.length?lastPasser:null;renderedStage=g.stage;}
+   if(renderedStage!==g.stage){previousStage=renderedStage;previousActive=g.events.length?lastPasser:null;renderedStage=g.stage;landing=receiver;}
    if(g.flight)lastPasser=g.flight.from;
    const progress=g.flight?Math.min(1,Math.max(0,(g.now-g.flight.start)/(g.flight.end-g.flight.start))):1;
    const eased=progress*progress*(3-2*progress);
