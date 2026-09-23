@@ -30,6 +30,43 @@
 .broadcast.screen-countdown{grid-template-rows:minmax(0,1fr)}.broadcast.screen-countdown .arena-grid{padding:2dvh 0}
 .broadcast.screen-countdown .screen-fit-content{height:100%}.broadcast.screen-countdown .broadcast-content{height:100%}
 .broadcast.screen-countdown .countdown-takeover strong{font-size:min(76dvh,55vw)}
+/* The arena clock overlays the bottom 6% in every mode. */
+.broadcast.arena-page{height:94dvh;margin:0 auto}
+.qr-only-screen{height:94dvh;bottom:6dvh}
+.qr-only-screen img{width:min(100vw,94dvh);height:min(100vw,94dvh)}
+@media(min-aspect-ratio:4/3) and (max-height:550px){
+ .broadcast.arena-page{padding:0 10px;grid-template-rows:52px minmax(0,1fr) 24px}
+ .broadcast>header .brand img{height:46px;width:auto}
+ .broadcast>header .brand span{font-size:22px}.broadcast>header .brand small{display:none}
+ .broadcast .arena-status{font-size:11px;letter-spacing:0}.broadcast .icon-button{padding:3px;margin-left:2px}
+ .broadcast .arena-grid{gap:12px;padding:2px 0;grid-template-columns:minmax(0,1fr) minmax(0,36%)}
+ .screen-fit{--fit-min-width:1}
+ .broadcast .screen-fit .ranking-title{margin:0 0 3px}.broadcast .screen-fit .ranking-title h1{font-size:24px;line-height:1;margin:0}
+ .broadcast .screen-fit .ranking-title h1 br{display:none}.broadcast .screen-fit .ranking-title h1 em:before{content:' '}
+ .broadcast .screen-fit .ranking-title .eyebrow,.broadcast .outline-trophy,.broadcast .ranking-label,.broadcast .ranking-foot,.broadcast .rank-detail,.broadcast .rank-name>small{display:none}
+ .broadcast .screen-fit .rank-name>small{display:none!important}
+ .broadcast .screen-fit .rank-row,.broadcast .screen-fit .rank-row.first{min-height:0;height:30px;padding:2px 5px;gap:8px}
+ .broadcast .screen-fit .rank-name,.broadcast .screen-fit .rank-row.first .rank-name{font-size:21px;line-height:1}
+ .broadcast .screen-fit .rank-number{font-size:22px;width:23px}
+ .broadcast .screen-fit .rank-row strong,.broadcast .screen-fit .rank-row.first strong{font-size:25px}
+ .broadcast .screen-fit .rank-row strong small{font-size:9px}.broadcast .rank-row>svg{display:none}
+ .broadcast .screen-fit .next-five{margin:5px 0 0;gap:4px}.broadcast .next-five>div{gap:3px;padding:0 3px}
+ .broadcast .next-five p{font-size:11px;overflow:hidden;text-overflow:ellipsis}.broadcast .next-five strong{font-size:10px}
+ .broadcast .screen-fit .alternate-copy h1{font-size:28px;margin:0 0 8px;line-height:1}
+ .broadcast .screen-fit .alternate-copy .eyebrow{display:none}.broadcast .screen-fit .alternate-copy p{font-size:19px;line-height:1.2;margin:7px 0}
+ .broadcast .screen-fit .winners-reveal h1{font-size:27px;line-height:1;margin:0 0 4px}.broadcast .winners-reveal h1 br{display:none}.broadcast .winners-reveal h1 em:before{content:' '}
+ .broadcast .winners-reveal>.eyebrow,.broadcast .winner-prize,.broadcast .winner-list span small{display:none}
+ .broadcast .winner-list{margin:5px 0;gap:3px}.broadcast .winner-list>div{padding:2px 6px;gap:8px}
+ .broadcast .winner-list b{font-size:20px}.broadcast .screen-fit .winner-list strong{font-size:22px}.broadcast .screen-fit .winner-list span{font-size:19px}
+ .broadcast .pickup-guide{padding:6px 8px}.broadcast .screen-fit .pickup-guide h2{font-size:21px;margin:0 0 3px}
+ .broadcast .screen-fit .pickup-guide p{font-size:15px;line-height:1.15;margin:3px 0}
+ .broadcast.screen-winners .arena-bottom{display:flex}
+ .broadcast .arena-bottom strong{font-size:17px;white-space:normal}.broadcast .arena-bottom>span{display:none}.broadcast .arena-bottom svg{height:18px;flex-shrink:0}
+ .screen-qr-panel{gap:3px}.screen-qr-panel h2{font-size:22px}.screen-qr-code{width:min(96cqw,82cqh);height:min(96cqw,82cqh)}
+ .screen-qr-panel .screen-qr-url{display:none}.screen-qr-panel p{font-size:12px;line-height:1.1}
+ .broadcast.screen-countdown{grid-template-rows:minmax(0,1fr)}.broadcast.screen-countdown .countdown-takeover strong{font-size:72dvh}
+ .broadcast.screen-countdown .countdown-takeover p,.broadcast.screen-countdown .countdown-takeover span{font-size:16px}
+}
 @media(max-aspect-ratio:3/4){
  .broadcast .arena-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,62fr) minmax(0,38fr);gap:1dvh}
  .screen-qr-panel{position:relative;align-items:flex-start;padding-left:3%;gap:3cqh}

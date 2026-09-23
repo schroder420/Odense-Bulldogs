@@ -53,3 +53,11 @@
 .standing{display:flex;align-items:center;justify-content:center;gap:7px;font-size:14px;color:#cadbce;margin:0 0 14px}
 .standing.lobby{margin:-6px 0 16px;font-size:13px;color:#b9cdbe}
 .standing svg{color:var(--orange)}
+.staff-analytics{margin-bottom:24px}.analytics-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.analytics-heading label{width:min(100%,320px)}
+.analytics-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0 28px}.analytics-cards article{background:#0c2c20;border:1px solid var(--line);padding:18px;border-radius:6px}.analytics-cards h3{font-size:15px;margin:0;color:#c6d7c9}.analytics-cards article>strong{display:block;font-family:var(--heading);font-size:38px;color:var(--orange);margin:8px 0;line-height:1.1}.analytics-cards p{font-size:13px;margin:0;color:#a9c0af}
+.analytics-activity{display:grid;gap:8px;margin:16px 0}.analytics-activity>div{display:grid;grid-template-columns:46px minmax(0,1fr) 55px;align-items:center;gap:10px;font-size:13px}.analytics-activity strong{text-align:right}.analytics-track{height:14px;border-radius:3px;background:#0c2c20;overflow:hidden}.analytics-track>div{height:100%;background:var(--orange)}
+@media(max-width:700px){.analytics-heading{display:block}.analytics-heading label{width:100%}.analytics-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.analytics-cards article{padding:12px}.analytics-cards article>strong{font-size:30px}}
+@media(max-width:360px){.analytics-cards{grid-template-columns:1fr}}
+.voucher-warning{background:#fff0db;color:#572607;border:2px solid #e48331;padding:16px;border-radius:6px;margin:20px 0}.voucher-warning strong{font-size:20px}.voucher-warning p{margin:8px 0 0;color:inherit}
+.voucher-swipe{position:relative;height:62px;background:#e48331;color:#102f21;border-radius:32px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;touch-action:none;user-select:none;cursor:grab;margin:18px 0;overflow:hidden;padding-left:36px}
+.voucher-thumb{position:absolute;top:2px;width:58px;height:58px;border-radius:50%;background:white;display:grid;place-items:center;font-size:30px;box-shadow:0 2px 8px #0003}.voucher-swipe[aria-disabled=true]{opacity:.65;cursor:wait}.voucher-swipe:focus-visible{outline:3px solid white;outline-offset:4px}

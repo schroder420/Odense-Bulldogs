@@ -50,9 +50,20 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
   const {data:r}=await client.from('rounds').select('*').order('starts_at',{ascending:false}).limit(1).maybeSingle();
   if(!r)return json({...p,best:0,bestTime:0,bestPasses:0,rank:null,claim:null});
   const {data:score}=await client.from('scores').select('score_points,time_ms,passes').eq('round_id',r.id).eq('participant_id',id).maybeSingle();
-  const {data:prize}=await client.from('prizes').select('rank,redeemed_at,round_id,rounds(prize,title)').eq('participant_id',id).order('created_at',{ascending:false}).limit(1).maybeSingle();
+  const {data:prize}=await client.from('prizes').select('rank,redeemed_at,round_id,rounds(prize,title)').eq('participant_id',id).gte('rank',1).lte('rank',5).order('created_at',{ascending:false}).limit(1).maybeSingle();
   const prizeRound=prize?.rounds as unknown as {prize:string;title:string}|undefined;
   return json({...p,best:score?.score_points||0,bestTime:score?.time_ms||0,bestPasses:score?.passes||0,rank:prize&&prize.round_id===r.id?prize.rank:null,claim:prize?{code:claimCode(prize.round_id,id),rank:prize.rank,redeemed:!!prize.redeemed_at,prize:prizeRound?.prize||r.prize,roundTitle:prizeRound?.title||r.title}:null});
+ }
+ if(path==='admin/analytics'){
+  if(!await admin())return json({error:'Log ind som personale.'},401);
+  const requested=req.nextUrl.searchParams.get('roundId');
+  if(requested&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested))return json({error:'Ugyldig runde.'},400);
+  const {data:rounds,error}=await db().from('rounds').select('id,title,starts_at').order('starts_at',{ascending:false}).limit(50);if(error)throw error;
+  const roundId=requested||rounds?.[0]?.id||null;
+  if(requested&&!rounds?.some(r=>r.id===requested))return json({error:'Vælg en af de seneste 50 runder.'},404);
+  const {data:metrics,error:metricsError}=roundId?await db().rpc('staff_analytics',{p_round:roundId}):{data:null,error:null};
+  if(metricsError){if(metricsError.code==='PGRST202'||metricsError.code==='42883')return json({error:'Statistik kræver databaseopdateringen 007_staff_analytics.sql.'},503);throw metricsError;}
+  return json({rounds,roundId,metrics,generatedAt:new Date().toISOString()});
  }
  if(path==='admin'){
   if(!configured())return json({configured:false,authenticated:false});
@@ -77,6 +88,16 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
  if(Number(req.headers.get('content-length')||0)>300000)return json({error:'For mange data.'},413);
  const raw=await req.text();if(raw.length>300000)return json({error:'For mange data.'},413);
  const body=JSON.parse(raw||'{}');const path=(await params).path.join('/');
+ if(path==='voucher/redeem'){
+  const id=await player();if(!id)return json({error:'Åbn voucheren på den telefon, du spillede med.'},401);
+  const code=typeof body.code==='string'?body.code:'';
+  if(!/^[A-F0-9]{24}$/.test(code))return json({error:'Ugyldig voucher.'},400);
+  const {data:prize,error}=await db().from('prizes').select('rank,redeemed_at').eq('participant_id',id).eq('claim_hash',hash(code)).gte('rank',1).lte('rank',5).maybeSingle();
+  if(error)throw error;if(!prize)return json({error:'Voucheren blev ikke fundet.'},404);
+  if(prize.redeemed_at)return json({ok:true,alreadyRedeemed:true});
+  try{await rpc('redeem_prize',{p_hash:hash(code)});}catch(e){if(!(e instanceof Error)||!e.message.includes('ALREADY_REDEEMED'))throw e;}
+  return json({ok:true});
+ }
  if(path==='join'){
   const nickname=String(body.nickname||'').trim().replace(/\s+/g,' ');
   if(!/^[\p{L}\p{N} ._\-]{2,18}$/u.test(nickname))return json({error:'Brug 2–18 bogstaver eller tal i dit navn.'},400);
@@ -133,7 +154,7 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   const {data:unfinished,error:lookupError}=await db().from('rounds').select('id,status').neq('status','final').limit(1).maybeSingle();
   if(lookupError)throw lookupError;
   if(unfinished)return json({error:'Der kører allerede en runde. Luk for nye forsøg, fastlås vinderne, og åbn så en ny.'},409);
-  const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'Præmie til top 5').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
+  const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'1 alm. fadøl / sodavand pr. vinder · Viggos Bar').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
  }
  if(path==='admin/close'){
   const {data:r}=await db().from('rounds').select('*').eq('id',body.roundId).single();if(!r||r.status!=='open')return json({error:'Runden er allerede lukket.'},400);

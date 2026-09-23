@@ -7,7 +7,8 @@ export default function ScreenFit({children}:{children:ReactNode}){
  useLayoutEffect(()=>{
   const outer=host.current!,inner=content.current!;
   const fit=()=>{
-   const width=Math.max(600,outer.clientWidth);
+   const minimum=Number(getComputedStyle(outer).getPropertyValue('--fit-min-width'))||600;
+   const width=Math.max(minimum,outer.clientWidth);
    inner.style.width=`${width}px`;
    const scale=Math.min(outer.clientWidth/width,outer.clientHeight/Math.max(1,inner.scrollHeight));
    inner.style.transform=`translate(-50%, -50%) scale(${scale})`;

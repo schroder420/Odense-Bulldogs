@@ -8,8 +8,7 @@ import {roundKit} from '@/lib/team';
 import {causes,formatScore,formatTime,reasons,totalScore,GAME_VERSION,type Game} from '@/lib/game';
 import {api} from '@/lib/client';
 import type {Board,Me} from '@/lib/types';
-import QRCode from 'qrcode';
-function Claim({me}:{me:Me}){const [qr,setQr]=useState('');useEffect(()=>{if(me.claim)QRCode.toDataURL(`${location.origin}/admin#claim=${me.claim.code}`,{margin:2,width:200,color:{dark:'#102f21',light:'#ffffff'}}).then(setQr);},[me.claim?.code]);if(!me.claim)return null;return <div className="claim-card"><Ticket size={28}/><h2>Du er nummer {me.claim.rank}!</h2><p>{me.claim.prize}</p><small>{me.claim.roundTitle}</small>{me.claim.redeemed?<strong>Præmien er udleveret</strong>:<><p>Vis denne kode til personalet. Den kan kun bruges én gang.</p>{qr&&<img src={qr} alt="Dit personlige præmiebevis"/>}<code>{me.claim.code.match(/.{1,4}/g)?.join(' ')}</code><small>Hold koden privat. Den giver adgang til din præmie.</small></>}</div>;}
+import PrizeVoucher from './PrizeVoucher';
 export default function GamePage(){
  const [board,setBoard]=useState<Board|null>(null),[me,setMe]=useState<Me|null>(null),[nickname,setNickname]=useState('');
  const [session,setSession]=useState<Session|null>(null),[result,setResult]=useState<Game|null>(null),[busy,setBusy]=useState(false),[playing,setPlaying]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState(false),[practiceBest,setPracticeBest]=useState(0),[ready,setReady]=useState(false),[countdown,setCountdown]=useState<number|null>(null),[rules,setRules]=useState(false),[pending,setPending]=useState(false);
@@ -71,6 +70,6 @@ export default function GamePage(){
  </div>
  {error&&<div className="notice" role="alert">{error}</div>}{pending&&!playing&&<><button className="secondary retry" onClick={retry} disabled={busy}>Send ventende resultat igen</button><button className="text-button" disabled={busy} onClick={()=>{if(window.confirm('Opgiv det ventende resultat? Det kan ikke sendes igen bagefter.')){localStorage.removeItem('bulldogs-pending');setPending(false);setError('');}}}>Opgiv det ventende resultat</button></>}
  {rules&&!playing&&<div className="rules-panel"><h3>Sådan holder du pucken i live</h3><p>Tryk på en hvid medspiller foran dig. Mørke spillere kan både tackle dig og afskære afleveringen.</p><p>Ringen går fra grøn til rød og tømmes, når jægeren nærmer sig. En tom ring betyder, at du er fanget.</p><p>Lyser banden orange, kan du trykke på den for at følge den stiplede rute. Undertal giver færre medspillere i korte perioder.</p><p>Du starter med 3,5 sekunder til at aflevere. Hvert 10. sekund falder tiden med 20 %, indtil den når 1 sekund.</p><p>Din score er overlevelsestiden i sekunder plus ét point for hver gennemført aflevering. 24,82 sekunder og 11 afleveringer giver 35,82 point.</p><p>Flere forsøg er tilladt. Bedste score tæller. Ved samme score vinder den, der nåede den først. Skifter du væk fra spillet, slutter forsøget.</p><p>Gem denne browser til præmieudlevering. Kaldenavn og resultat vises offentligt; din deltageradgang gemmes i en nødvendig cookie.</p></div>}
- {me?.claim&&!playing&&<Claim me={me}/>}
+ {me?.claim&&!playing&&<PrizeVoucher key={me.claim.code} claim={me.claim}/>}
  </section></main><Footer/></div>;
 }

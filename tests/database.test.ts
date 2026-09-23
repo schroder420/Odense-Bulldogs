@@ -15,11 +15,29 @@ function playToWhistle(seed:number,limit:number){
  }
  return {game,events};
 }
-const migrations=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql'];
+const migrations=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql','005_qr_screen.sql','006_viggos_prize.sql'];
 async function migrate(db:PGlite){
  await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
  for(const file of migrations)await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));
 }
+test('only five winners receive vouchers even when claims are supplied for all seven players',async()=>{
+ const db=new PGlite();try{
+  await migrate(db);
+  const r=(await db.query<{id:string}>("insert into rounds(ends_at,cutoff_at) values(now()-interval '2 minutes',now()-interval '1 minute') returning id")).rows[0].id;
+  const ids=Array.from({length:7},()=>randomUUID()),claims:Record<string,string>={};
+  for(const [i,id] of ids.entries()){
+   await db.query('insert into participants(id,nickname) values($1,$2)',[id,`Spiller${i}`]);
+   await db.query('insert into scores(round_id,participant_id,score_points,time_ms,passes) values($1,$2,$3,$3,0)',[r,id,7000-i*1000]);
+   claims[id]=String(i+1).repeat(64);
+  }
+  await db.query('select finalize_round($1,$2)',[r,JSON.stringify(claims)]);
+  const winners=(await db.query<{participant_id:string}>('select participant_id from prizes order by rank')).rows;
+  assert.deepEqual(winners.map(p=>p.participant_id),ids.slice(0,5));
+  for(const id of ids.slice(5))await assert.rejects(db.query('select redeem_prize($1)',[claims[id]]),/INVALID_CLAIM/);
+  await db.query('select redeem_prize($1)',[claims[ids[0]]]);
+  await assert.rejects(db.query('select redeem_prize($1)',[claims[ids[0]]]),/ALREADY_REDEEMED/);
+ }finally{await db.close();}
+});
 test('database enforces RLS, best scores, closure, immutable winners and one-time redemption',async()=>{
  const db=new PGlite();try{
  await migrate(db);
