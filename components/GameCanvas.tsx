@@ -4,12 +4,12 @@ import {act,advance,causes,createGame,formatScore,formatTime,HEIGHT,position,tot
 import {tintOpponent} from '@/lib/sprites';
 import {waitingPose,puckOffset,endpointWeight,type Pose} from '@/lib/skater-pose';
 import type {OpponentKit} from '@/lib/team';
-export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit};
+export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit;initialTarget?:string};
 // Doedsfeedback: banen bliver staaende, aarsagen markeres, og foerst derefter toner resultatskaermen frem.
 const MARK_FOR=1100,FADE_FROM=480,FADE_OVER=420;
 // Lobbyens panel dækker den nederste del af banen, så demoen skubbes op i den synlige strimmel.
 const LOBBY_CAMERA=360;
-export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
+export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=false,onboardingBusy=false,onFirstPass}:{onboarding?:boolean;onboardingBusy?:boolean;onFirstPass?:(target:string)=>void;session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
  const canvas=useRef<HTMLCanvasElement>(null);const game=useRef<Game|null>(null);const camera=useRef(0);const start=useRef(0);const callback=useRef(onEnd);callback.current=onEnd;
  const [hud,setHud]=useState({time:0,passes:0,points:0,short:false,step:0,flight:false});const [assetError,setAssetError]=useState(false);
  const kit=session?.opponent||opponent;const kitKey=`${kit?.primary||''}${kit?.stripe||''}`;
@@ -92,6 +92,16 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
       const startWeight=endpointWeight(raw),endWeight=f.intercepted?0:endpointWeight(1-raw);
       const x=a.x+(b.x-a.x)*v+fromOffset.x*startWeight+toOffset.x*endWeight,y=a.y+(b.y-a.y)*v-camera.current+490+fromOffset.y*startWeight+toOffset.y*endWeight;
       ctx.strokeStyle='rgba(15,31,33,.2)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-(b.x-a.x)*.08,y-(b.y-a.y)*.08);ctx.lineTo(x,y);ctx.stroke();drawPuck(x,y);}
+    if(onboarding){
+      ctx.fillStyle='rgba(5,24,18,.72)';ctx.fillRect(0,0,WIDTH,HEIGHT);
+      // Redraw only the selectable Bulldogs and puckholder above the dimmed rink.
+      g.stage.home.forEach(p=>{const at=position(p,0);ctx.strokeStyle='#E48331';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(at.x,at.y-camera.current+490,43,43*shapeScale,0,0,Math.PI*2);ctx.stroke();drawPose(at,'home',waitingPose(p.id,at.x,g.active.x));});
+      const pose=activePose(0);drawPose(g.active,'home',pose);const offset=puckOffset(pose,shapeScale);drawPuck(g.active.x+offset.x,g.active.y-camera.current+490+offset.y);
+      ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 20px Arial';ctx.fillText('DU ER BULLDOGS I HVIDT',200,53);
+      ctx.font='15px Arial';ctx.fillText('Tryk på en hvid medspiller foran dig',200,83);
+      ctx.fillStyle='#dce8df';ctx.font='13px Arial';ctx.fillText('Første aflevering starter dit forsøg',200,110);
+      ctx.fillStyle='#fff';ctx.font='bold 14px Arial';ctx.fillText('DIG · MED PUCKEN',g.active.x,g.active.y-camera.current+565);
+    }
     const since=deadAt?frameNow-deadAt:0;
     const spot=g.dead?blame():null;
     if(spot){const pulse=.5+.5*Math.sin(since/95);const y=spot.y-camera.current+490;
@@ -111,7 +121,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
    if(stopped)return;
    frameNow=now;
    if(session){advance(g,Math.floor(now-start.current));if(g.dead){if(!deadAt){deadAt=now;try{navigator.vibrate?.(g.dead==='whistle'?[40,70,40]:70);}catch{}}finish();}}
-   else{
+   else if(!onboarding){
     // Stille demo i lobbyen: spillerne vugger, og jægeren lukker op og falder tilbage igen,
     // så man kan se, hvad ringen betyder, før man selv starter. Intet kan dø her.
     const elapsed=now-idleStart;
@@ -123,7 +133,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
    if(g.flight)lastPasser=g.flight.from;
    const progress=g.flight?Math.min(1,Math.max(0,(g.now-g.flight.start)/(g.flight.end-g.flight.start))):1;
    const eased=progress*progress*(3-2*progress);
-   const targetCamera=!session?LOBBY_CAMERA:g.flight?g.flight.from.y+(g.flight.to.y-g.flight.from.y)*eased:g.active.y;
+   const targetCamera=!session&&!onboarding?LOBBY_CAMERA:g.flight?g.flight.from.y+(g.flight.to.y-g.flight.from.y)*eased:g.active.y;
    const dt=lastFrame?Math.min(100,now-lastFrame):16.67;lastFrame=now;
    camera.current+=(targetCamera-camera.current)*(1-Math.exp(-dt/85));
    draw();
@@ -133,20 +143,22 @@ export default function GameCanvas({session,onEnd,onReady,opponent}:{session:Ses
    frame=(session?(!g.dead||now-deadAt<MARK_FOR):(!document.hidden&&!stillness))?requestAnimationFrame(loop):0;
   };
   const stillness=typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-  loaded.then(()=>{if(stopped)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);awayReceiveArt=tintOpponent(awayReceive,kit);}start.current=performance.now();idleStart=start.current;onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
+  loaded.then(()=>{if(stopped)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);awayReceiveArt=tintOpponent(awayReceive,kit);}start.current=performance.now();idleStart=start.current;if(session?.initialTarget)act(g,{t:0,target:session.initialTarget});onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
   const visibility=()=>{if(!session&&!document.hidden&&!stillness&&!frame){idleStart=performance.now()-g.now;frame=requestAnimationFrame(loop);return;}
    if(document.hidden&&session&&!g.dead){advance(g,Math.floor(performance.now()-start.current));if(!g.dead){g.dead='left';g.score=Math.floor(g.now);}finish();}};document.addEventListener('visibilitychange',visibility);
   return()=>{stopped=true;cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',visibility);};
- },[session,onReady,kitKey]);// eslint-disable-line react-hooks/exhaustive-deps
+ },[session,onReady,kitKey,onboarding]);// eslint-disable-line react-hooks/exhaustive-deps
  function input(target:string,bank=false){const g=game.current;if(!session||!g||g.dead)return;act(g,{t:Math.floor(performance.now()-start.current),target,bank});}
  function pointer(e:React.PointerEvent<HTMLCanvasElement>){const g=game.current;if(!g)return;const rect=e.currentTarget.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*WIDTH,y=(e.clientY-rect.top)/rect.height*HEIGHT+camera.current-490;
+  if(onboarding){if(onboardingBusy)return;const target=g.stage.home.find(p=>Math.hypot(x-position(p,0).x,y-p.y)<43);if(target)onFirstPass?.(target.id);return;}
   const b=g.stage.bank;if(b&&Math.hypot(x-b.point.x,y-b.point.y)<43){input(b.target,true);return;}
   const candidates=[...g.stage.home,...g.stage.away].map(p=>({p,d:Math.hypot(x-position(p,g.now).x,y-p.y)})).sort((a,b)=>a.d-b.d);if(candidates[0]?.d<43)input(candidates[0].p.id);
  }
- return <><div className="game-hud"><div><span>SCORE</span><strong>{formatScore(hud.points)}<small> POINT</small></strong></div>
+ return <><div className={`game-hud ${onboarding?'onboarding-hud':''}`}><div><span>SCORE</span><strong>{formatScore(hud.points)}<small> POINT</small></strong></div>
  <div className="metric"><span>OVERLEVELSE</span><strong>{formatTime(hud.time)}<small> SEK</small></strong></div>
  <div className="metric passes"><span>AFLEVERINGER</span><strong>{String(hud.passes).padStart(2,'0')}</strong></div></div>
  <div className="canvas-box"><canvas ref={canvas} width={WIDTH} height={HEIGHT} onPointerDown={pointer} aria-label="Ishockeybane. Tryk på hvide Bulldogs-medspillere for at aflevere." />
+ {onboarding&&<p className="onboarding-status" role="status">{onboardingBusy?'Gør dit forsøg klar…':'Tag dig god tid – uret er ikke startet'}</p>}
  {hud.short&&session&&<div className="short-banner">UNDERTAL <span>Færre medspillere. Samme pres.</span></div>}
  {assetError&&<div className="asset-error" role="alert">Spillergrafikken kunne ikke hentes. Genindlæs siden, før du spiller.</div>}
  </div></>;

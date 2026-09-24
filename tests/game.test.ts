@@ -64,3 +64,12 @@ test('undertal fjerner en medspiller uden at fjerne modstanderpresset',()=>{
  // Version 2 mistede en modstander sammen med medspilleren. Den fejl er nu kun historik.
  assert.ok(stageFor(1,4,{x:200,y:0},28000,2).away.length<stageFor(1,4,{x:200,y:0},28000,3).away.length);
 });
+
+test('every highlighted onboarding receiver makes a safe first pass and replays correctly',()=>{
+ for(let seed=1;seed<=500;seed++)for(const target of createGame(seed).stage.home){
+  const game=createGame(seed);assert.ok(act(game,{t:0,target:target.id}));
+  advance(game,450);assert.equal(game.dead,null);assert.equal(game.passes,1);
+  advance(game,game.deadline+1);
+  assert.equal(totalScore(replay(seed,game.events,game.score)),totalScore(game));
+ }
+});

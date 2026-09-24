@@ -154,7 +154,7 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   const {data:unfinished,error:lookupError}=await db().from('rounds').select('id,status').neq('status','final').limit(1).maybeSingle();
   if(lookupError)throw lookupError;
   if(unfinished)return json({error:'Der kører allerede en runde. Luk for nye forsøg, fastlås vinderne, og åbn så en ny.'},409);
-  const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'1 alm. fadøl / sodavand pr. vinder · Viggos Bar').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
+  const end=Date.now()+minutes*60000;const {error}=await db().from('rounds').insert({opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'1 alm. fadøl eller sodavand pr. vinder · Viggos Bar').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+30000).toISOString()});if(error)throw error;return json({ok:true});
  }
  if(path==='admin/close'){
   const {data:r}=await db().from('rounds').select('*').eq('id',body.roundId).single();if(!r||r.status!=='open')return json({error:'Runden er allerede lukket.'},400);
