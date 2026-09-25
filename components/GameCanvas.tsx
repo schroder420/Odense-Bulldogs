@@ -29,7 +29,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=fa
   const stridesFor=(id:string)=>id.charCodeAt(id.length-1)%2===1;
   const art=(team:'home'|'away',stride:boolean):CanvasImageSource=>
    team==='home'?(stride?homeStride:homeGlide):(stride?awayStrideArt:awayGlideArt);
-  const g=createGame(session?.seed||1978,session?.limit||Infinity);game.current=g;camera.current=0;renderedStage=g.stage;
+  const g=createGame(session?.seed||1978,session?.limit??Infinity);game.current=g;camera.current=0;renderedStage=g.stage;
   let landing:Pose={front:0,mirror:false,angle:0,stride:false};
   let flightStamp=-1,launch=landing,receiver=landing;
   const activePose=(time:number):Pose=>{

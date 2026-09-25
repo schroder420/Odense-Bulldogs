@@ -1,5 +1,10 @@
 // Shared deterministic simulation. The server replays input, never trusts a submitted score.
-export const GAME_VERSION = 3;
+export const GAME_VERSION = 4;
+// Reserve five seconds before the scheduled cutoff for submitting the result.
+// Versioning preserves the deadline issued to runs that were already in progress.
+export function runLimit(startedAt:string,cutoffAt:string,version=GAME_VERSION){
+ return Math.max(0,Math.floor(Date.parse(cutoffAt)-Date.parse(startedAt))-(version>=4?5000:0));
+}
 // Samlet score = overlevelsestid + 1 point per gennemført aflevering.
 // Begge dele holdes i millisekund-skala, så 24.820 ms + 11 afleveringer = 35.820 = 35,82 point.
 export const PASS_POINT = 1000;

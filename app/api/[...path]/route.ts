@@ -2,7 +2,7 @@ import { NextRequest,NextResponse } from 'next/server';
 import { randomUUID,randomInt } from 'node:crypto';
 import {admin,claimCode,configured,cookieOptions,db,equal,hash,leaderboard,player,rpc,ticket} from '@/lib/server';
 import {DEFAULT_OPPONENT,validKit,roundKit} from '@/lib/team';
-import {replay,scorePasses,totalScore,GAME_VERSION} from '@/lib/game';
+import {replay,scorePasses,totalScore,GAME_VERSION,runLimit} from '@/lib/game';
 export const runtime='nodejs';
 export const maxDuration=15;
 const json=(value:unknown,status=200)=>NextResponse.json(value,{status,headers:{'Cache-Control':'private, no-store'}});
@@ -109,12 +109,12 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   const id=await player();if(!id)return json({error:'Vælg først et spillernavn.'},401);
   const result=await rpc('start_run',{p_player:id,p_seed:randomInt(1,2147483647)});
   const {error:versionError}=await db().from('runs').update({game_version:GAME_VERSION}).eq('id',result.run.id);if(versionError)throw versionError;
-  return json({version:GAME_VERSION,opponent:roundKit(result.round),id:result.run.id,seed:Number(result.run.seed),limit:Math.floor(new Date(result.round.cutoff_at).getTime()-new Date(result.run.started_at).getTime()),roundId:result.round.id});
+  return json({version:GAME_VERSION,opponent:roundKit(result.round),id:result.run.id,seed:Number(result.run.seed),limit:runLimit(result.run.started_at,result.round.cutoff_at,GAME_VERSION),roundId:result.round.id});
  }
  if(path==='run/finish'){
   const id=await player();if(!id)return json({error:'Din deltageradgang mangler.'},401);
   const {data:run,error}=await db().from('runs').select('*,rounds(cutoff_at)').eq('id',String(body.id)).eq('participant_id',id).single();if(error||!run)return json({error:'Forsøget blev ikke fundet.'},404);
-  const limit=Math.floor(new Date(run.rounds.cutoff_at).getTime()-new Date(run.started_at).getTime());
+  const limit=runLimit(run.started_at,run.rounds.cutoff_at,run.game_version??1);
   const validated=replay(Number(run.seed),body.events,body.end,limit,body.abandoned===true,run.game_version??1);
   if(validated.score>Date.now()-new Date(run.started_at).getTime()+1000)return json({error:'Tiden kunne ikke godkendes.'},400);
   // Serveren regner selv scoren ud af det replayede forløb. Klienten sender kun sine tryk.

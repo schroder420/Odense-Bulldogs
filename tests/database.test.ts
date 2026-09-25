@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {PGlite} from '@electric-sql/pglite';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
-import {act,advance,allowance,createGame,distanceToSegment,position,replay,scorePasses,totalScore,type Input} from '../lib/game';
+import {runLimit,act,advance,allowance,createGame,distanceToSegment,position,replay,scorePasses,totalScore,type Input} from '../lib/game';
 // Spiller sikre afleveringer, indtil konkurrencens sidste floejt afslutter forsoeget.
 function playToWhistle(seed:number,limit:number){
  const game=createGame(seed,limit);const events:Input[]=[];
@@ -116,5 +116,24 @@ test('slutfloejt godkendes, selv naar forsoegets frist kun er praecis paa mikros
  assert.equal(board.entries[0].time_ms,limit);
  // En tid ud over forsoegets frist er stadig ugyldig.
  await assert.rejects(db.query('select finish_run($1,$2,$3,$3,0)',[second,tooLong,limit+50]),/INVALID_TIME/);
+ }finally{await db.close();}
+});
+
+test('new runs stop five seconds early and their whistle score is accepted by the database',async()=>{
+ const db=new PGlite();try{
+  await migrate(db);const player=randomUUID();
+  await db.query("insert into participants(id,nickname) values ($1,'Buffer')",[player]);
+  await db.query("insert into rounds(ends_at,cutoff_at) values(now()+interval '1 minute',now()+interval '90 seconds')");
+  const run=(await db.query<{v:any}>('select start_run($1,99) v',[player])).rows[0].v.run;
+  await db.query("update runs set started_at=now()-interval '20 seconds' where id=$1",[run.id]);
+  await db.query("update rounds set status='closing',ends_at=now()-interval '30 seconds',cutoff_at=now()+interval '4 seconds'");
+  const row=(await db.query<{s:string;c:string}>('select started_at::text s,cutoff_at::text c from runs join rounds on rounds.id=runs.round_id where runs.id=$1',[run.id])).rows[0];
+  const limit=runLimit(row.s,row.c);assert.equal(runLimit(row.s,row.c,3)-limit,5000);
+  const {game,events}=playToWhistle(99,limit);
+  const validated=replay(99,events,game.score,limit);assert.equal(validated.dead,'whistle');
+  await db.query('select finish_run($1,$2,$3,$4,$5)',[run.id,player,totalScore(validated),validated.score,scorePasses(validated)]);
+  const board=(await db.query<{v:any}>('select public_board() v')).rows[0].v;
+  assert.equal(board.entries[0].time_ms,limit);
+  assert.equal(runLimit(row.c,row.c),0);
  }finally{await db.close();}
 });
