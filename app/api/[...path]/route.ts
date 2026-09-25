@@ -48,11 +48,11 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
   const id=await player();if(!id)return json(null);
   const client=db();const {data:p,error}=await client.from('participants').select('id,nickname').eq('id',id).single();if(error)return json(null);
   const {data:r}=await client.from('rounds').select('*').order('starts_at',{ascending:false}).limit(1).maybeSingle();
-  if(!r)return json({...p,best:0,bestTime:0,bestPasses:0,rank:null,claim:null});
+  if(!r)return json({...p,roundId:null,roundStatus:null,best:0,bestTime:0,bestPasses:0,rank:null,claim:null});
   const {data:score}=await client.from('scores').select('score_points,time_ms,passes').eq('round_id',r.id).eq('participant_id',id).maybeSingle();
   const {data:prize}=await client.from('prizes').select('rank,redeemed_at,round_id,rounds(prize,title)').eq('participant_id',id).gte('rank',1).lte('rank',5).order('created_at',{ascending:false}).limit(1).maybeSingle();
   const prizeRound=prize?.rounds as unknown as {prize:string;title:string}|undefined;
-  return json({...p,best:score?.score_points||0,bestTime:score?.time_ms||0,bestPasses:score?.passes||0,rank:prize&&prize.round_id===r.id?prize.rank:null,claim:prize?{code:claimCode(prize.round_id,id),rank:prize.rank,redeemed:!!prize.redeemed_at,prize:prizeRound?.prize||r.prize,roundTitle:prizeRound?.title||r.title}:null});
+  return json({...p,roundId:r.id,roundStatus:r.status,best:score?.score_points||0,bestTime:score?.time_ms||0,bestPasses:score?.passes||0,rank:prize&&prize.round_id===r.id?prize.rank:null,claim:prize?{code:claimCode(prize.round_id,id),rank:prize.rank,redeemed:!!prize.redeemed_at,prize:prizeRound?.prize||r.prize,roundTitle:prizeRound?.title||r.title}:null});
  }
  if(path==='admin/analytics'){
   if(!await admin())return json({error:'Log ind som personale.'},401);

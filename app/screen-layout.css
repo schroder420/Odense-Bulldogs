@@ -30,10 +30,10 @@
 .broadcast.screen-countdown{grid-template-rows:minmax(0,1fr)}.broadcast.screen-countdown .arena-grid{padding:2dvh 0}
 .broadcast.screen-countdown .screen-fit-content{height:100%}.broadcast.screen-countdown .broadcast-content{height:100%}
 .broadcast.screen-countdown .countdown-takeover strong{font-size:min(76dvh,55vw)}
-/* The arena clock overlays the bottom 6% in every mode. */
-.broadcast.arena-page{height:94dvh;margin:0 auto}
-.qr-only-screen{height:94dvh;bottom:6dvh}
-.qr-only-screen img{width:min(100vw,94dvh);height:min(100vw,94dvh)}
+/* The arena clock overlays the bottom 8% in every mode. */
+.broadcast.arena-page{height:92dvh;margin:0 auto}
+.qr-only-screen{height:92dvh;bottom:8dvh}
+.qr-only-screen img{width:min(100vw,92dvh);height:min(100vw,92dvh)}
 @media(min-aspect-ratio:4/3) and (max-height:550px){
  .broadcast.arena-page{padding:0 10px;grid-template-rows:52px minmax(0,1fr) 24px}
  .broadcast>header .brand img{height:48px;width:auto}
