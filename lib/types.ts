@@ -2,4 +2,4 @@ export type Round={id:string;title:string;status:'open'|'closing'|'final';starts
 // score_points = overlevelsestid i ms + 1000 per aflevering. time_ms og passes er regnestykket bag.
 export type Entry={participant_id:string;nickname:string;score_points:number;time_ms:number;passes:number;rank:number};
 export type Board={configured:boolean;round:Round|null;entries:Entry[];participants:number;serverTime:string};
-export type Me={roundId:string|null;roundStatus:Round['status']|null;id:string;nickname:string;best:number;bestTime:number;bestPasses:number;rank:number|null;claim:{code:string;rank:number;redeemed:boolean;prize:string;roundTitle:string}|null};
+export type Me={id:string;nickname:string;best:number;bestTime:number;bestPasses:number;rank:number|null;claim:{code:string;rank:number;redeemed:boolean;prize:string;roundTitle:string}|null};

@@ -64,5 +64,3 @@
 
 .onboarding-hud{opacity:.35}.onboarding-status{position:absolute;bottom:12px;left:12px;right:12px;text-align:center;color:#fff;font-size:13px;pointer-events:none}
 .has-onboarding>header,.has-onboarding .side-copy,.has-onboarding .frame-label{opacity:.35}
-
-.survey-card .primary{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;text-decoration:none}.survey-card>p:not(.eyebrow){line-height:1.5}
