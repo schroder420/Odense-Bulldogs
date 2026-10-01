@@ -15,7 +15,7 @@ function playToWhistle(seed:number,limit:number){
  }
  return {game,events};
 }
-const migrations=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql','005_qr_screen.sql','006_viggos_prize.sql'];
+const migrations=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql','005_qr_screen.sql','006_viggos_prize.sql','008_default_prize.sql','009_scheduled_competitions.sql'];
 async function migrate(db:PGlite){
  await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');
  for(const file of migrations)await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));

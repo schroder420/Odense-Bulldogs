@@ -10,7 +10,7 @@ npm run dev
 ```
 
 - Spil: http://localhost:3000
-- Storskærm: http://localhost:3000/leaderboard
+- Storskærm: åbn rundens personlige link fra personalepanelet (også før start).
 - Personale: http://localhost:3000/admin
 
 En QR-kode med `localhost` virker kun på samme computer. Efter publicering bruger QR-koden automatisk sitets offentlige adresse. Lokalt kan samme netværksadresse bruges på computer og telefon til træning.
@@ -22,12 +22,12 @@ En QR-kode med `localhost` virker kun på samme computer. Efter publicering brug
 - Tidsfrist: `max(1000, 3500 × 0.8 ^ floor(tid_i_sekunder / 10))` millisekunder. Tidsfristen bestemmes ved modtagelse af pucken. Minimum 1 sekund fra 60 sekunder og frem.
 - Tryk på en hvid spiller eller en orange bandemarkering. Ingen tastaturgenveje; spillet styres kun med fingeren. Skift væk fra fanen afslutter forsøget. Afleveringen er undervejs 450 ms direkte og 600 ms via banden.
 - Serveren udsteder tilfældig bane og forsøgs-ID, genspiller input og beregner resultatet. Klienten sender ikke en vilkårlig highscore. Ét aktivt forsøg pr. deltager, og afsluttede forsøg kan ikke indsendes flere gange med nye resultater.
-- Live top 10, top 5 fremhævet, permanent QR-kode, nedtælling og tilstand ved tabt forbindelse. Storskærmen opdateres hvert 2,5 sekund; fælles data har kort CDN-cache.
+- Storskærmen viser top 5, en permanent QR-kode og nedtælling. Den opdateres hvert sekund; offentlige data har 1 sekunds CDN-cache. Fast komposition til 672 × 336, skaleret til hele viewporten med 8 % fri bund.
 - **Samlet score = overlevelsestid i sekunder + 1 point per gennemført aflevering.** 24,82 sekunder og 11 afleveringer giver 35,82 point. Ingen presbonus.
 - Flere forsøg, kun bedste score tæller. Ved lighed vinder først opnåede score, derefter stabil sortering efter deltager-ID.
 - Undertal tager en medspiller ud af opstillingen, men fjerner ikke modstandere. Der er altid mindst én fri afleveringsmulighed.
 - Modstanderens trøje- og stribefarve vælges af personalet før runden og farves ind på selve spillersprite'en, så holdene kan kendes fra hinanden på isen.
-- Personalet åbner runder, lukker for nye forsøg, skjuler navne og fastlåser top 5. Vindere får et personligt præmiebevis med QR-kode. Indløsning er atomisk i databasen og tillades kun én gang.
+- Personalet planlægger starttid og varighed, lukker eventuelt for nye forsøg og skjuler navne. Systemet fastlåser top 5 automatisk. Vindere får en personlig voucher, som barpersonalet swiper. Indløsning er atomisk i databasen og tillades kun én gang.
 - Hvid dragt uden sponsorer, leveret Bulldogs-logo og farverne #18492E, #B4232A og #E48331. Fire spillersprites, to skridtfaser per hold, med gennemsigtig baggrund på cirka 12 KB hver. Skrifttyper hostes lokalt.
 - Modstandersprite'en er en **farvemester**: kraftigt mættet blå trøje og magenta kanter. De to farvetoner ligger langt fra hinanden og langt fra det sorte udstyr, så `lib/sprites.ts` kan bytte dem præcist til personalets valgte farver, mens hjelm, handsker, skøjter og stav aldrig bliver ramt.
 
@@ -44,7 +44,14 @@ En QR-kode med `localhost` virker kun på samme computer. Efter publicering brug
    | `supabase/003_screen_control.sql` | Fjernstyring af storskærmens indhold |
    | `supabase/004_total_score.sql` | Samlet score: `score_points`, `time_ms` og `passes` |
 
-   **Rækkefølgen ved udgivelse betyder noget.** Kør SQL'en først, deploy bagefter. Koden kalder `finish_run` med fem argumenter og læser `score_points`; uden 004 kan resultater ikke gemmes. Mangler en migration, svarer API'et med præcis hvilken fil der skal køres.
+   | `supabase/005_qr_screen.sql` | Separat QR-visning |
+   | `supabase/006_viggos_prize.sql` | Voucher og Viggos Bar |
+   | `supabase/007_staff_analytics.sql` | Personalestatistik |
+   | `supabase/008_default_prize.sql` | 1 alm. fadøl eller sodavand |
+   | `supabase/009_scheduled_competitions.sql` | Planlægning, rundevisning og automatisk fastlåsning |
+   | `supabase/010_competition_clock.sql` | Databaseur, der kører uden åbne browsere |
+
+   **Rækkefølgen ved udgivelse betyder noget.** Kør SQL'en først, deploy bagefter. Denne udgave kræver 009 og 010. Kør dem mellem konkurrencer, deploy derefter. Personalepanelet kontrollerer, at urjobbet er aktivt, før en runde kan oprettes. Se `docs/competition-release.md` for kontrol efter deploy.
 4. Opret et Vercel-team ejet af klubben. Brug Pro til den kommercielle klubinstallation. Importér denne mappe via klubbens GitHub-repository, eller deploy med Vercel CLI. Framework: Next.js. Build: `npm run build`. Installer fra den medfølgende lockfil.
 5. Indstil disse **servermiljøvariabler** i Vercel. Ingen må begynde med `NEXT_PUBLIC_`:
 
@@ -61,15 +68,23 @@ Generér to uafhængige værdier med `openssl rand -hex 32` til session og perso
 6. Vælg samme region for Vercel og Supabase; `vercel.json` peger på Frankfurt. Tilknyt klubbens ønskede domæne. Genudgiv efter ændringer i miljøvariabler.
 7. Kontrollér alle tre sider via HTTPS. Test to separate deltagerbrowsere og personalets browser i staging. Åbn én runde, indsend tider, luk runden, fastlås og kontrollér dobbeltindløsning. Gentag med tabt forbindelse og genindsendelse.
 
-Der er ikke oprettet konti, brugt eksisterende private projekter, købt abonnementer eller publiceret en produktion fra denne leverance.
+Ændringerne til planlægning og automatisk afvikling er testet lokalt. Migration 009/010 og denne kodeudgave er endnu ikke aktiveret på den eksisterende Supabase/Vercel-produktion.
 
 ## Konkurrencens afslutning
 
-Personalet vælger 1–15 minutter til nye forsøg. Alle forsøg har samme sidste fløjt, 30 sekunder efter denne periode. Herefter er der 20 sekunder til netværksforsinkede resultater. Først derefter kan personalet fastlåse top 5 og udstede præmiebeviser.
+Personalet vælger et præcist starttidspunkt og 1–15 minutters varighed. Tomt startfelt starter straks. Formularen viser enhedens tidszone; tidspunktet gemmes som UTC.
+
+- Ved `ends_at` stopper alle forsøg. Storskærmens nedtælling viser denne frist.
+- Ved `ends_at + 5 sekunder` indsender telefonerne de forsøg, der nåede slutfløjt. Tidligere dødsfald gemmes straks.
+- Ved `cutoff_at = ends_at + 10 sekunder` afviser databasen nye resultater og fastlåser top 5 med vouchers. Et Cron-job kontrollerer hvert sekund. Skærmen henter resultatet hvert sekund, så afsløringen kan ske lidt efter de 10 sekunder afhængigt af netværk/jobafvikling.
+
+Telefonen viser tak for spillet, derefter enten taberbesked eller voucheren. Intet spørgeskema. Gamle runder beholder deres tidligere frister.
+
+Storskærmen roterer 36 sekunder leaderboard, 15 sekunder regler med lokal demo og 9 sekunder stor QR. Personalets manuelle valg sætter rotationen på pause; nedtælling, indsamling og automatisk vinderafsløring har forrang. Hvert skærmlink er signeret til én runde, gyldigt til syv dage efter rundens frist (eller efter oprettelse af linket til en gammel runde). Token ligger i URL-fragmentet, flyttes til sessionStorage og sendes kun som Authorization-header. Den gamle fælles skærmkode bruges ikke længere. QR-koden peger til samme runde på telefonen.
 
 Knappen “Luk for nye forsøg” stopper kun nye starter. Eksisterende forsøg beholder den oprindelige slutfrist, så klient og server ikke kommer til at bedømme forskellige tidsgrænser. Vindere skal beholde samme browser og nødvendige cookie. Et deltager-ID er bevis på adgang til resultatet, ikke på en persons borgerlige identitet. Deling af et præmiebevis svarer til at give billetten til en anden. Personalet skal vente på bekræftet indløsning før udlevering.
 
-Præmieteksten er redigerbar. De foreslåede ølbilletter er en standard i personalets formular, ikke en bekræftet præmieordning.
+Standardpræmien er 1 alm. fadøl eller sodavand pr. vinder i Viggos Bar. Kun top 5 får vouchers.
 
 ## Kapacitet: 500–3.000 samtidige
 
@@ -89,7 +104,7 @@ Mål: under 1 % HTTP-fejl, over 99,5 % godkendte testresultater, p95 under 1,5 s
 
 Resultatgenspilning forhindrer simple falske scores og ulovlige afleveringer; det er **ikke fuld botbeskyttelse**. En teknisk deltager kan automatisere lovlige input eller oprette flere browseridentiteter. Inden præmier i rigtig drift skal klubben beslutte behov for ekstra botbeskyttelse/deltagerkontrol og teste dette. Der loves ikke “snydesikkert”.
 
-Personaleadgang bruger en signeret, HttpOnly-cookie, origin-kontrol og en databasebaseret loginbegrænsning. SQL-funktionerne er utilgængelige fra den offentlige Supabase-nøgle. Service-role-nøglen omgår RLS og skal forblive på serveren. Præmier gemmer kun hash af indløsningskoden. Toplisten viser kun kaldenavne og resultater.
+Personaleadgang bruger en signeret, HttpOnly-cookie, origin-kontrol og en databasebaseret loginbegrænsning. SQL-funktionerne er utilgængelige fra den offentlige Supabase-nøgle. Service-role-nøglen omgår RLS og skal forblive på serveren. Nye præmier gemmer en tilfældig indløsningskode og dens hash i den beskyttede prizetabel. Koden returneres kun til den berettigede deltagers cookie; den indgår aldrig i offentlige board-svar. Gamle vouchers bruger fortsat den afledte kode. Toplisten viser kun kaldenavne og resultater.
 
 Der gemmes kaldenavn, anonymt deltager-ID, forsøg, tider og udleveringsstatus. Ingen mail/telefon indsamles fra tilskuere. Klubben skal fastlægge slettefrist og sin deltagertekst inden lancering. Delte personaleadgange kan senere erstattes af individuelle personalekonti, hvis der er behov for navngivet udleveringslog.
 

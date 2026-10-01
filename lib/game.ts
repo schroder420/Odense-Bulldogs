@@ -1,9 +1,9 @@
 // Shared deterministic simulation. The server replays input, never trusts a submitted score.
-export const GAME_VERSION = 4;
-// Reserve five seconds before the scheduled cutoff for submitting the result.
-// Versioning preserves the deadline issued to runs that were already in progress.
-export function runLimit(startedAt:string,cutoffAt:string,version=GAME_VERSION){
- return Math.max(0,Math.floor(Date.parse(cutoffAt)-Date.parse(startedAt))-(version>=4?5000:0));
+export const GAME_VERSION = 5;
+// New rounds stop at ends_at = cutoff_at - 10 seconds; legacy rounds keep their 5-second buffer.
+// timing_version belongs to the round; game version preserves old replay behavior.
+export function runLimit(startedAt:string,cutoffAt:string,version=GAME_VERSION,timingVersion=1){
+ return Math.max(0,Math.floor(Date.parse(cutoffAt)-Date.parse(startedAt))-(timingVersion===2?10000:version>=4?5000:0));
 }
 // Samlet score = overlevelsestid + 1 point per gennemført aflevering.
 // Begge dele holdes i millisekund-skala, så 24.820 ms + 11 afleveringer = 35.820 = 35,82 point.

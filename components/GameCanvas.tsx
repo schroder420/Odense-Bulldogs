@@ -1,19 +1,20 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {act,advance,causes,createGame,formatScore,formatTime,HEIGHT,position,totalScore,WIDTH,reasons,type Game,type Stage,type Point} from '@/lib/game';
+import {act,advance,distanceToSegment,causes,createGame,formatScore,formatTime,HEIGHT,position,totalScore,WIDTH,reasons,type Game,type Stage,type Point} from '@/lib/game';
 import {tintOpponent} from '@/lib/sprites';
 import {waitingPose,puckOffset,endpointWeight,type Pose} from '@/lib/skater-pose';
 import type {OpponentKit} from '@/lib/team';
-export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit;initialTarget?:string};
+export type Session={id:string;seed:number;limit:number;practice:boolean;opponent?:OpponentKit;initialTarget?:string;elapsedMs?:number;receivedAt?:number;submitAt?:number|null;serverTime?:number;roundId?:string};
 // Doedsfeedback: banen bliver staaende, aarsagen markeres, og foerst derefter toner resultatskaermen frem.
 const MARK_FOR=1100,FADE_FROM=480,FADE_OVER=420;
 // Lobbyens panel dækker den nederste del af banen, så demoen skubbes op i den synlige strimmel.
 const LOBBY_CAMERA=360;
-export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=false,onboardingBusy=false,onFirstPass}:{onboarding?:boolean;onboardingBusy?:boolean;onFirstPass?:(target:string)=>void;session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
+export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=false,onboardingBusy=false,onFirstPass,demo=false}:{demo?:boolean;onboarding?:boolean;onboardingBusy?:boolean;onFirstPass?:(target:string)=>void;session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
  const canvas=useRef<HTMLCanvasElement>(null);const game=useRef<Game|null>(null);const camera=useRef(0);const start=useRef(0);const callback=useRef(onEnd);callback.current=onEnd;
  const [hud,setHud]=useState({time:0,passes:0,points:0,short:false,step:0,flight:false});const [assetError,setAssetError]=useState(false);
  const kit=session?.opponent||opponent;const kitKey=`${kit?.primary||''}${kit?.stripe||''}`;
  useEffect(()=>{
+  let finishTimer:ReturnType<typeof setTimeout>|undefined;
   let frame=0,stopped=false,ended=false,lastHud=0,shapeScale=1,lastFrame=0,deadAt=0,frameNow=0,idleStart=0;let previousStage:Stage|null=null,previousActive:Point|null=null;let renderedStage:Stage;const ctx=canvas.current!.getContext('2d',{alpha:false,desynchronized:true})!;
   const lowPower=typeof navigator!=='undefined' && ((navigator.hardwareConcurrency||4)<=4 || (navigator as Navigator & {connection?:{saveData?:boolean}}).connection?.saveData===true);
   // To skridtfaser per hold. Hver spiller beholder sin egen fase, så staven aldrig hopper fra
@@ -113,14 +114,16 @@ export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=fa
       ctx.fillStyle='#fff';ctx.font='bold 29px Arial';ctx.fillText(reasons[g.dead],WIDTH/2,HEIGHT/2-6);
       ctx.fillStyle='#c8d8cc';ctx.font='14px Arial';ctx.fillText(causes[g.dead],WIDTH/2,HEIGHT/2+28);
       ctx.fillStyle='#93ab99';ctx.font='13px Arial';ctx.fillText('Resultatet bliver gemt…',WIDTH/2,HEIGHT/2+58);ctx.restore();}}
-    if(session&&g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('DU SPILLER FOR BULLDOGS · FREMAD ↑',200,92);}
+    if(session&&!demo&&g.step<2&&!g.dead){ctx.fillStyle='#18492e';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.fillText('TRYK PÅ EN HVID MEDSPILLER',200,70);ctx.font='12px Arial';ctx.fillText('DU SPILLER FOR BULLDOGS · FREMAD ↑',200,92);}
   };
-  const finish=()=>{if(!ended){ended=true;window.setTimeout(()=>callback.current({...g,events:[...g.events]}),MARK_FOR);}};
+  const finish=()=>{if(!ended){ended=true;finishTimer=setTimeout(()=>{if(!stopped)callback.current({...g,events:[...g.events]});},g.dead==='whistle'?0:MARK_FOR);}};
   let lastPasser:Point|null=null;
   const loop=(now:number)=>{
-   if(stopped)return;
+   if(stopped||!canvas.current)return;
    frameNow=now;
-   if(session){advance(g,Math.floor(now-start.current));if(g.dead){if(!deadAt){deadAt=now;try{navigator.vibrate?.(g.dead==='whistle'?[40,70,40]:70);}catch{}}finish();}}
+   if(session){const t=Math.floor(now-start.current);
+    if(demo&&!g.dead&&!g.flight&&g.step<5&&t>=g.readyAt+1350){const target=g.stage.home.find(p=>g.stage.away.every(a=>distanceToSegment(position(a,t),g.active,position(p,t))>27));if(target)act(g,{t,target:target.id});}
+    advance(g,t);if(g.dead){if(!deadAt){deadAt=now;try{navigator.vibrate?.(g.dead==='whistle'?[40,70,40]:70);}catch{}}finish();}}
    else if(!onboarding){
     // Stille demo i lobbyen: spillerne vugger, og jægeren lukker op og falder tilbage igen,
     // så man kan se, hvad ringen betyder, før man selv starter. Intet kan dø her.
@@ -143,13 +146,13 @@ export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=fa
    frame=(session?(!g.dead||now-deadAt<MARK_FOR):(!document.hidden&&!stillness))?requestAnimationFrame(loop):0;
   };
   const stillness=typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-  loaded.then(()=>{if(stopped)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);awayReceiveArt=tintOpponent(awayReceive,kit);}start.current=performance.now();idleStart=start.current;if(session?.initialTarget)act(g,{t:0,target:session.initialTarget});onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
+  loaded.then(()=>{if(stopped||!canvas.current)return;if(kit){awayGlideArt=tintOpponent(awayGlide,kit);awayStrideArt=tintOpponent(awayStride,kit);awayReceiveArt=tintOpponent(awayReceive,kit);}start.current=session?.receivedAt!==undefined?session.receivedAt-(session.elapsedMs||0):performance.now();idleStart=start.current;if(session?.initialTarget)act(g,{t:0,target:session.initialTarget});onReady?.(true);frame=requestAnimationFrame(loop);}).catch(()=>{if(!stopped){setAssetError(true);onReady?.(false);}});
   const visibility=()=>{if(!session&&!document.hidden&&!stillness&&!frame){idleStart=performance.now()-g.now;frame=requestAnimationFrame(loop);return;}
    if(document.hidden&&session&&!g.dead){advance(g,Math.floor(performance.now()-start.current));if(!g.dead){g.dead='left';g.score=Math.floor(g.now);}finish();}};document.addEventListener('visibilitychange',visibility);
-  return()=>{stopped=true;cancelAnimationFrame(frame);document.removeEventListener('visibilitychange',visibility);};
- },[session,onReady,kitKey,onboarding]);// eslint-disable-line react-hooks/exhaustive-deps
+  return()=>{stopped=true;cancelAnimationFrame(frame);if(finishTimer)clearTimeout(finishTimer);document.removeEventListener('visibilitychange',visibility);};
+ },[session,onReady,kitKey,onboarding,demo]);// eslint-disable-line react-hooks/exhaustive-deps
  function input(target:string,bank=false){const g=game.current;if(!session||!g||g.dead)return;act(g,{t:Math.floor(performance.now()-start.current),target,bank});}
- function pointer(e:React.PointerEvent<HTMLCanvasElement>){const g=game.current;if(!g)return;const rect=e.currentTarget.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*WIDTH,y=(e.clientY-rect.top)/rect.height*HEIGHT+camera.current-490;
+ function pointer(e:React.PointerEvent<HTMLCanvasElement>){if(demo)return;const g=game.current;if(!g)return;const rect=e.currentTarget.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*WIDTH,y=(e.clientY-rect.top)/rect.height*HEIGHT+camera.current-490;
   if(onboarding){if(onboardingBusy)return;const target=g.stage.home.find(p=>Math.hypot(x-position(p,0).x,y-p.y)<43);if(target)onFirstPass?.(target.id);return;}
   const b=g.stage.bank;if(b&&Math.hypot(x-b.point.x,y-b.point.y)<43){input(b.target,true);return;}
   const candidates=[...g.stage.home,...g.stage.away].map(p=>({p,d:Math.hypot(x-position(p,g.now).x,y-p.y)})).sort((a,b)=>a.d-b.d);if(candidates[0]?.d<43)input(candidates[0].p.id);

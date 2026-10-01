@@ -8,6 +8,7 @@ import {roundKit} from '@/lib/team';
 import {causes,formatScore,formatTime,reasons,totalScore,GAME_VERSION,type Game} from '@/lib/game';
 import {api} from '@/lib/client';
 import type {Board,Me} from '@/lib/types';
+import {submissionDelay} from '@/lib/competition';
 import PrizeVoucher from './PrizeVoucher';
 export default function GamePage(){
  const [board,setBoard]=useState<Board|null>(null),[me,setMe]=useState<Me|null>(null),[nickname,setNickname]=useState('');
@@ -23,14 +24,28 @@ export default function GamePage(){
   return {rank:0,gap:last.score_points-best};
  }
  const [intro,setIntro]=useState<boolean|null>(null);
- const launchPending=useRef(false);
+ const launchPending=useRef(false);const roundFilter=useRef('');
+ const [now,setNow]=useState(Date.now()),[offset,setOffset]=useState(0),[sendingLater,setSendingLater]=useState(false);
+ useEffect(()=>{roundFilter.current=new URLSearchParams(location.search).get('round')||'';const t=setInterval(()=>setNow(Date.now()),250);return()=>clearInterval(t);},[]);
  const mounted=useRef(true);const lastProfile=useRef(0),lastRound=useRef(''),profileLoaded=useRef(false),bestBefore=useRef(0);const onReady=useCallback((value:boolean)=>setReady(value),[]);
  useEffect(()=>{mounted.current=true;try{setPracticeBest(Number(localStorage.getItem('bulldogs-practice-best-v3')||0));setNickname(localStorage.getItem('bulldogs-nickname')||'');setPending(!!localStorage.getItem('bulldogs-pending'));}catch{}return()=>{mounted.current=false;};},[]);
- const refresh=useCallback(async(forceMe=false)=>{try{const b=await api<Board>('board');if(!mounted.current)return;setBoard(b);const roundKey=`${b.round?.id}:${b.round?.status}`;if(forceMe||Date.now()-lastProfile.current>30000||lastRound.current!==roundKey){const m=await api<Me|null>('me');if(!mounted.current)return;setMe(m);if(m&&!profileLoaded.current)setNickname(m.nickname);profileLoaded.current=true;lastProfile.current=Date.now();}lastRound.current=roundKey;}catch{if(mounted.current)setError('Vi kan ikke hente konkurrencen lige nu. Du kan stadig træne.');}},[]);
- useEffect(()=>{if(playing)return;refresh(true);const timer=setInterval(()=>{if(!document.hidden)refresh();},7000+Math.random()*2000);return()=>clearInterval(timer);},[playing,refresh]);
- const open=board?.round?.status==='open'&&new Date(board.round.ends_at).getTime()>Date.now();
- async function submit(payload:unknown){await api('run/finish',payload);try{localStorage.removeItem('bulldogs-pending');}catch{}setPending(false);setSaved(true);setError('');await refresh(true);}
- async function retry(){setBusy(true);try{const value=localStorage.getItem('bulldogs-pending');if(value)await submit(JSON.parse(value));}catch(e){setError(e instanceof Error?e.message:'Resultatet kunne ikke sendes.');}finally{setBusy(false);}}
+ const refresh=useCallback(async(forceMe=false)=>{try{const began=Date.now();const query=roundFilter.current?`?round=${encodeURIComponent(roundFilter.current)}`:'';const b=await api<Board>('board'+query);if(!mounted.current)return;setBoard(b);setOffset(Date.parse(b.serverTime)-(began+Date.now())/2);const roundKey=`${b.round?.id}:${b.round?.status}`;if(forceMe||Date.now()-lastProfile.current>30000||lastRound.current!==roundKey){const m=await api<Me|null>('me'+query);if(!mounted.current)return;setMe(m);if(m&&!profileLoaded.current)setNickname(m.nickname);profileLoaded.current=true;lastProfile.current=Date.now();}lastRound.current=roundKey;}catch{if(mounted.current)setError('Vi kan ikke hente konkurrencen lige nu. Du kan stadig træne.');}},[]);
+ const nearFinish=!!board?.round&&board.round.status!=='final'&&Date.parse(board.round.ends_at)-(now+offset)<15000;
+ useEffect(()=>{if(playing)return;refresh();const timer=setInterval(()=>{if(!document.hidden)refresh();},(nearFinish?2000:7000)+Math.random()*1000);return()=>clearInterval(timer);},[playing,refresh,nearFinish]);
+ const open=board?.round?.status==='open'&&Date.parse(board.round.starts_at)<=now+offset&&Date.parse(board.round.ends_at)>now+offset;
+ const ended=!!board?.round&&Date.parse(board.round.ends_at)<=now+offset;
+ const final=board?.round?.status==='final';
+ const won=final&&me?.roundId===board?.round?.id&&me?.rank!=null&&me.rank<=5;
+ const outcomeKnown=final&&(!me||me.roundId===board?.round?.id&&me.roundStatus==='final');
+ async function submit(payload:unknown){
+  for(let attempt=0;;attempt++){try{await api('run/finish',payload);break;}catch(e){if(attempt>=2)throw e;await new Promise(resolve=>setTimeout(resolve,attempt===0?300:700));}}
+ try{localStorage.removeItem('bulldogs-pending');}catch{}setPending(false);setSaved(true);setError('');await refresh(true);}
+ async function retry(){setBusy(true);try{const value=localStorage.getItem('bulldogs-pending');if(value){const payload=JSON.parse(value);if(payload.notBefore>Date.now()+offset)throw new Error('Resultatet sendes om et øjeblik.');await submit(payload);}}catch(e){setError(e instanceof Error?e.message:'Resultatet kunne ikke sendes.');}finally{setBusy(false);}}
+ useEffect(()=>{if(!pending||playing||sendingLater||result||!board)return;
+  let cancelled=false;let payload:{notBefore?:number};try{const value=localStorage.getItem('bulldogs-pending');if(!value)return;payload=JSON.parse(value);}catch{return;}
+  const timer=setTimeout(()=>{if(!cancelled)void retry();},Math.max(0,(payload.notBefore||0)-(Date.now()+offset)));
+  return()=>{cancelled=true;clearTimeout(timer);};
+ },[pending,playing,sendingLater,!!board]);
  async function begin(practice:boolean){if(busy||!ready)return;setBusy(true);setError('');setSaved(false);setResult(null);
   bestBefore.current=practice?practiceBest:me?.best||0;
   try{
@@ -42,40 +57,43 @@ export default function GamePage(){
  const launch=async(target:string)=>{if(busy||intro===null||launchPending.current)return;launchPending.current=true;setBusy(true);setError('');
   const practice=intro;
   try{
-   const run=practice?{id:`practice-${Date.now()}`,seed:crypto.getRandomValues(new Uint32Array(1))[0],limit:Infinity,opponent:roundKit(board?.round)}:await api('run/start',{version:GAME_VERSION});
+   const requestAt=performance.now();
+   const run=practice?{id:`practice-${Date.now()}`,seed:crypto.getRandomValues(new Uint32Array(1))[0],limit:Infinity,opponent:roundKit(board?.round)}:await api('run/start',{version:GAME_VERSION,roundId:board?.round?.id});
    if(!mounted.current)return;
-   setSession({...run,practice,initialTarget:target,opponent:run.opponent||roundKit(board?.round)});setIntro(null);
+   const receivedAt=performance.now();const halfRoundTrip=practice?0:(receivedAt-requestAt)/2;
+   setSession({...run,receivedAt,elapsedMs:(run.elapsedMs||0)+halfRoundTrip,serverTime:run.serverTime?run.serverTime+halfRoundTrip:undefined,practice,initialTarget:target,opponent:run.opponent||roundKit(board?.round)});setIntro(null);
   }catch(e){setError(e instanceof Error?e.message:'Spillet kunne ikke starte.');setIntro(null);setPlaying(false);}
   finally{launchPending.current=false;setBusy(false);}
  };
  const finish=async(g:Game)=>{setPlaying(false);setResult(g);
   if(session?.practice){const best=Math.max(practiceBest,totalScore(g));setPracticeBest(best);try{localStorage.setItem('bulldogs-practice-best-v3',String(best));}catch{}return;}
-  if(!session)return;const payload={id:session.id,events:g.events,end:g.score,abandoned:g.dead==='left'};try{localStorage.setItem('bulldogs-pending',JSON.stringify(payload));}catch{}setPending(true);try{await submit(payload);}catch(e){setError(e instanceof Error?e.message:'Resultatet afventer forbindelse.');}
+  if(!session)return;const delay=g.dead==='whistle'?submissionDelay(session.submitAt,session.serverTime,session.receivedAt,performance.now()):0;
+  const payload={id:session.id,events:g.events,end:g.score,abandoned:g.dead==='left',notBefore:delay>0?session.submitAt:0};try{localStorage.setItem('bulldogs-pending',JSON.stringify(payload));}catch{}setPending(true);setSendingLater(delay>0);if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay));if(!mounted.current)return;setSendingLater(false);try{await submit(payload);}catch(e){setError(e instanceof Error?e.message:'Resultatet afventer forbindelse.');}
  };
  const enterFullscreen=()=>{const element=document.documentElement as HTMLElement & {requestFullscreen?:()=>Promise<void>};element.requestFullscreen?.().catch(()=>{});};
  return <div className={`page game-page ${playing?'is-playing':''} ${intro!==null?'has-onboarding':''}`}><header><Brand/><span className="event-label"><span className="diamond"/>{playing?(intro!==null?'DIN FØRSTE AFLEVERING':session?.practice?'TRÆNING':'KONKURRENCEN ER I GANG'):open?'KAMPENS PAUSE':'PAUSESPILLET'}{playing&&<button className="game-fullscreen" aria-label="Åbn spillet i fuld skærm" onClick={enterFullscreen}><Maximize2 size={16}/></button>}</span></header>
  <main className="play-layout"><section className="side-copy"><p className="eyebrow"><span/> ISEN ER DIN</p><h1>HOLD<br/>PUCKEN<br/><em>I LIVE.</em></h1><p className="lede">Ét tryk. En ny chance.<br/>Hvor længe kan du holde presset væk?</p>
  <div className="instructions"><div><b>01</b><p><strong>Find din medspiller</strong><span>Hvid trøje. Fri afleveringsbane.</span></p><MoveUpRight/></div><div><b>02</b><p><strong>Spil, før du bliver fanget</strong><span>Ringen bliver rød, når presset stiger.</span></p><RotateCcw/></div><div><b>03</b><p><strong>Hver aflevering giver point</strong><span>Sekunder + afleveringer. Bedste forsøg tæller.</span></p><Trophy/></div></div>
- <div className="prize-strip"><Trophy size={24}/><p><strong>{board?.round?.prize||'KÆMP DIG IND I TOP 5'}</strong><span>{board?.round?'Kampens bedste tider vinder.':'Spil dig varm inden næste konkurrence.'}</span></p></div>
+ <div className="prize-strip"><Trophy size={24}/><p><strong>{board?.round?.prize||'KÆMP DIG IND I TOP 5'}</strong><span>{board?.round?'Kampens fem bedste scorer vinder.':'Spil dig varm inden næste konkurrence.'}</span></p></div>
  </section>
- <section className="game-column" aria-label="Spillet"><div className="game-frame"><div className="frame-label"><span>BULLDOGS / SURVIVAL</span><span>{session?.practice||!open?'TRÆNING':'LIVE'}</span></div>
+ <section className="game-column" aria-label="Spillet">{ended&&!playing&&<section className="round-thanks" role="status"><h2>{won?'Tillykke – du er i top 5!':'Tak for spillet!'}</h2><p>{!outcomeKnown?'Vi finder vinderne … Bliv her lidt endnu.':won?'Din voucher ligger herunder. Hent 1 alm. fadøl eller sodavand i Viggos Bar.':'Du kom desværre ikke i top 5 denne gang. Tak, fordi du spillede med Bulldogs!'}</p></section>}<div className="game-frame"><div className="frame-label"><span>BULLDOGS / SURVIVAL</span><span>{session?.practice||!open?'TRÆNING':'LIVE'}</span></div>
  <GameCanvas onboarding={intro!==null} onboardingBusy={busy} onFirstPass={launch} session={session} opponent={roundKit(board?.round)} onEnd={finish} onReady={onReady}/>
  {!playing&&<div className={`game-overlay ${result?'has-result':''}`}>
   {result?<><p className="eyebrow">{session?.practice?'TRÆNINGSRESULTAT':saved?'RESULTAT GEMT':'DIT RESULTAT'}</p><h2>{reasons[result.dead!]}</h2><p className="result-cause">{causes[result.dead!]}</p><div className="result-time">{formatScore(totalScore(result))}<span>POINT I ALT</span></div><p className="result-detail">{formatTime(result.score)} sek. <span>·</span> {result.passes} afleveringer <span>·</span> Bedste {formatScore(session?.practice?practiceBest:Math.max(me?.best||0,saved?totalScore(result):0))}</p>
   {bestBefore.current>0&&totalScore(result)>bestBefore.current&&<p className="record"><Star size={15}/> NY PERSONLIG REKORD</p>}
-  {!session?.practice&&saved&&(()=>{const s=standing();return s?<p className="standing">{s.rank?`Du ligger nummer ${s.rank}`:`Du mangler ${formatScore(s.gap)} point for at nå top 10`}</p>:null;})()}{!session?.practice&&<p className="save-status">{saved?<><ShieldCheck size={15}/> Dit resultat er godkendt og gemt</>:'Dit resultat afventer godkendelse'}</p>}<button className="primary" disabled={busy||(!session?.practice&&pending)} onClick={()=>begin(session?.practice||!open)}><RotateCcw size={18}/>Spil igen<ArrowRight size={20}/></button><button className="text-button" onClick={()=>{setResult(null);setSession(null);}}>Tilbage til start</button></>:<>
+  {!session?.practice&&saved&&(()=>{const s=standing();return s?<p className="standing">{s.rank?`Du ligger nummer ${s.rank}`:`Du mangler ${formatScore(s.gap)} point for at nå top 10`}</p>:null;})()}{!session?.practice&&<p className="save-status">{saved?<><ShieldCheck size={15}/> Dit resultat er godkendt og gemt</>:sendingLater?'Slutfløjt! Dit resultat sendes om et øjeblik.':'Dit resultat afventer godkendelse'}</p>}<button className="primary" disabled={busy||sendingLater||(!session?.practice&&pending)} onClick={()=>begin(session?.practice||!open)}><RotateCcw size={18}/>{!session?.practice&&!open?'Træn videre':'Spil igen'}<ArrowRight size={20}/></button><button className="text-button" onClick={()=>{setResult(null);setSession(null);}}>Tilbage til start</button></>:<>
   <div className="lobby-heading"><span className="mini-logo"><img src="/assets/bulldogs-logo.png" alt=""/></span><div><p className="eyebrow">{open?'DIN TUR PÅ ISEN':'KLAR TIL FØRSTE AFLEVERING?'}</p><h2>Hvor længe holder du?</h2></div></div>
   <TeamKey kit={roundKit(board?.round)}/>
   <p className="lobby-help"><strong>1 point per sekund. 1 point per aflevering.</strong></p>
   {(()=>{const s=standing();return s?<p className="standing lobby">{s.rank?<><Trophy size={14}/> Du ligger nummer {s.rank} lige nu</>:<>Du mangler {formatScore(s.gap)} point for at nå top 10</>}</p>:null;})()}
   <label className="name-label">{open?'Dit navn på storskærmen':'Dit navn til træning (valgfrit)'}<input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="Fx BulldogsFan78" minLength={2} maxLength={18} autoComplete="nickname" enterKeyHint="done"/></label>
   <button className="primary" disabled={busy||!ready||(!!open&&nickname.trim().length<2)|| (!!open&&pending)} onClick={()=>begin(!open)}>{busy?'GØR ISEN KLAR…':open?'SPIL MED':'PRØV SPILLET'}<ArrowUpRight size={22}/></button>
-  {open?<button className="text-button" disabled={busy} onClick={()=>begin(true)}>Tag en træningsrunde først</button>:<p className="practice-note">Træning · tæller ikke i konkurrencen</p>}
+  {open?<button className="text-button" disabled={busy} onClick={()=>begin(true)}>Tag en træningsrunde først</button>:<p className="practice-note">{board?.round&&Date.parse(board.round.starts_at)>now+offset?`Konkurrencen starter kl. ${new Date(board.round.starts_at).toLocaleTimeString('da-DK')}. Træn imens.`:'Træning · tæller ikke i konkurrencen'}</p>}
   <button className="rules-toggle" onClick={()=>setRules(!rules)} aria-expanded={rules}>{rules?'Skjul spilleregler':'Sådan spiller du'}</button>
   </>}
  </div>}
  </div>
- {error&&<div className="notice" role="alert">{error}</div>}{pending&&!playing&&<><button className="secondary retry" onClick={retry} disabled={busy}>Send ventende resultat igen</button><button className="text-button" disabled={busy} onClick={()=>{if(window.confirm('Opgiv det ventende resultat? Det kan ikke sendes igen bagefter.')){localStorage.removeItem('bulldogs-pending');setPending(false);setError('');}}}>Opgiv det ventende resultat</button></>}
+ {error&&<div className="notice" role="alert">{error}</div>}{pending&&!playing&&!sendingLater&&<><button className="secondary retry" onClick={retry} disabled={busy}>Send ventende resultat igen</button><button className="text-button" disabled={busy} onClick={()=>{if(window.confirm('Opgiv det ventende resultat? Det kan ikke sendes igen bagefter.')){localStorage.removeItem('bulldogs-pending');setPending(false);setError('');}}}>Opgiv det ventende resultat</button></>}
  {rules&&!playing&&<div className="rules-panel"><h3>Sådan holder du pucken i live</h3><p>Tryk på en hvid medspiller foran dig. Mørke spillere kan både tackle dig og afskære afleveringen.</p><p>Ringen går fra grøn til rød og tømmes, når jægeren nærmer sig. En tom ring betyder, at du er fanget.</p><p>Lyser banden orange, kan du trykke på den for at følge den stiplede rute. Undertal giver færre medspillere i korte perioder.</p><p>Du starter med 3,5 sekunder til at aflevere. Hvert 10. sekund falder tiden med 20 %, indtil den når 1 sekund.</p><p>Din score er overlevelsestiden i sekunder plus ét point for hver gennemført aflevering. 24,82 sekunder og 11 afleveringer giver 35,82 point.</p><p>Flere forsøg er tilladt. Bedste score tæller. Ved samme score vinder den, der nåede den først. Skifter du væk fra spillet, slutter forsøget.</p><p>Gem denne browser til præmieudlevering. Kaldenavn og resultat vises offentligt; din deltageradgang gemmes i en nødvendig cookie.</p></div>}
  {me?.claim&&!playing&&<PrizeVoucher key={me.claim.code} claim={me.claim}/>}
  </section></main><Footer/></div>;
