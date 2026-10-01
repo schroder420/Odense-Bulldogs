@@ -8,7 +8,7 @@ import {screenView} from '../lib/screen';
 import {screenToken,verifyScreenToken} from '../lib/screen-token';
 import {submissionDelay} from '../lib/competition';
 import type {Round} from '../lib/types';
-const migrationFiles=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql','005_qr_screen.sql','006_viggos_prize.sql','008_default_prize.sql','009_scheduled_competitions.sql'];
+const migrationFiles=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql','005_qr_screen.sql','006_viggos_prize.sql','008_default_prize.sql','009_scheduled_competitions.sql','011_start_round_now.sql'];
 async function database(){const db=new PGlite();await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');for(const file of migrationFiles)await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));return db;}
 test('scheduled rounds reject early/wrong-round starts and finalize autonomously into exactly five one-use vouchers',async()=>{
  const db=await database();try{
@@ -73,4 +73,21 @@ test('screen tokens are bound to round, signature, kind and expiry',()=>{
  assert.equal(verifyScreenToken(token+'.extra',id,secret,10000),false);
  const body=Buffer.from(JSON.stringify({roundId:id,expires:20000,kind:'admin'})).toString('base64url');
  assert.equal(verifyScreenToken(`${body}.${createHmac('sha256',secret).update(body).digest('base64url')}`,id,secret,10000),false);
+});
+
+test('start now preserves duration and screen identity, opens play, and cannot reset an active round',async()=>{
+ const db=await database();try{
+  const r=(await db.query<{id:string}>("insert into rounds(timing_version,starts_at,ends_at,cutoff_at) values(2,now()+interval '30 seconds',now()+interval '210 seconds',now()+interval '220 seconds') returning id")).rows[0].id;
+  const player=randomUUID();await db.query("insert into participants(id,nickname) values($1,'Startnu')",[player]);
+  await assert.rejects(db.query('select start_round_run($1,99,$2)',[player,r]),/ROUND_CLOSED/);
+  await db.query('select start_round_now($1)',[r]);
+  const first=(await db.query<{s:string;duration:number;buffer:number}>('select starts_at::text s,extract(epoch from ends_at-starts_at)::float duration,extract(epoch from cutoff_at-ends_at)::float buffer from rounds where id=$1',[r])).rows[0];
+  assert.equal(first.duration,180);assert.equal(first.buffer,10);
+  const run=(await db.query<{v:any}>('select start_round_run($1,99,$2) v',[player,r])).rows[0].v;assert.equal(run.round.id,r);
+  await db.query('select start_round_now($1)',[r]);
+  assert.equal((await db.query<{s:string}>('select starts_at::text s from rounds where id=$1',[r])).rows[0].s,first.s);
+  for(const role of ['anon','authenticated']){await db.exec(`set role ${role}`);await assert.rejects(db.query('select start_round_now($1)',[r]));await db.exec('reset role');}
+  await db.query("update rounds set status='final' where id=$1",[r]);
+  await assert.rejects(db.query('select start_round_now($1)',[r]),/ROUND_CLOSED/);
+ }finally{await db.close();}
 });

@@ -170,6 +170,12 @@ export async function POST(req:NextRequest,{params}:{params:Promise<{path:string
   if(!Number.isFinite(start)||start<Date.now()-10000||start>Date.now()+366*86400000)return json({error:'Vælg et starttidspunkt i fremtiden, højst et år frem.'},400);
   const end=start+minutes*60000;const {error}=await db().from('rounds').insert({timing_version:2,screen_rotation:true,starts_at:new Date(start).toISOString(),opponent_name:opponent.name.trim(),opponent_primary:opponent.primary,opponent_stripe:opponent.stripe,title:String(body.title||'Kampens pause').slice(0,60),prize:String(body.prize||'1 alm. fadøl eller sodavand pr. vinder · Viggos Bar').slice(0,160),ends_at:new Date(end).toISOString(),cutoff_at:new Date(end+10000).toISOString()});if(error)throw error;return json({ok:true});
  }
+ if(path==='admin/start-now'){
+  if(!roundIdValid(body.roundId))return json({error:'Ugyldig runde.'},400);
+  const {data,error}=await db().rpc('start_round_now',{p_round:body.roundId});
+  if(error){if(['PGRST202','42883'].includes(error.code))return json({error:'Start kamp nu kræver databaseopdateringen 011_start_round_now.sql.'},503);throw error;}
+  return json(data);
+ }
  if(path==='admin/cancel'){
   const now=new Date().toISOString();
   const {data,error}=await db().from('rounds').update({status:'final',finalized_at:now,ends_at:now,cutoff_at:now,screen_mode:'info',screen_title:'KONKURRENCEN ER AFLYST',screen_body:'Tak for din interesse. Hold øje med næste pausespil.',screen_rotation:false}).eq('id',body.roundId).eq('status','open').gt('starts_at',now).select('id').maybeSingle();

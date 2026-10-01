@@ -25,3 +25,7 @@
 Den nye samtidige slutfløjtsbølge er ikke belastningstestet i produktion. Fem sekunder til indsendelse kan ikke garantere mod udfald på telefonens mobilforbindelse. Pending-resultatet gemmes lokalt og genindsendes idempotent; efter fastlåsning ændres vinderne ikke.
 
 Supabase Cron: https://supabase.com/docs/guides/cron/quickstart
+
+## Start en planlagt kamp straks
+
+Kør `supabase/011_start_round_now.sql` før deploy af knappen **Start kamp nu**. Den flytter start, slutfløjt og fastlåsning samlet, så varighed og indsendelsesbuffer bevares. Rundens link og QR ændres ikke. Gentagne klik nulstiller ikke en kamp, der er i gang.
