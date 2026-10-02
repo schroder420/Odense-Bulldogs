@@ -16,8 +16,10 @@ export default function Leaderboard(){
   let gone=false,busy=false;let toast:ReturnType<typeof setTimeout>;
   const round=new URLSearchParams(location.search).get('round');
   const fragment=new URLSearchParams(location.hash.slice(1)).get('token');let token=fragment||'';
-  try{if(fragment){sessionStorage.setItem(`bulldogs-screen:${round}`,fragment);history.replaceState(null,'',location.pathname+location.search);}else token=sessionStorage.getItem(`bulldogs-screen:${round}`)||'';}catch{}
-  if(!round||!token){setError('Åbn konkurrencens storskærmslink fra personalepanelet.');return;}
+  // Keep the bearer link in the address bar so it can be forwarded to any device.
+  // Restore tokens from older open tabs once; fresh links do not need browser storage.
+  try{if(fragment)sessionStorage.setItem(`bulldogs-screen:${round}`,fragment);else{token=sessionStorage.getItem(`bulldogs-screen:${round}`)||'';if(token)history.replaceState(null,'',`${location.pathname}${location.search}#token=${encodeURIComponent(token)}`);}}catch{}
+  if(!round||!token){setError('Linket mangler adgangstoken. Brug det komplette storskærmslink, du har fået tilsendt.');return;}
   QRCode.toString(`${location.origin}/?round=${encodeURIComponent(round)}`,{type:'svg',margin:4,errorCorrectionLevel:'M',color:{dark:'#08251b',light:'#adc4ac'}}).then(svg=>{if(!gone)setQr('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));});
   const update=async()=>{if(busy)return;busy=true;const started=Date.now();try{
    const response=await fetch(`/api/screen-board?round=${encodeURIComponent(round)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});const b=await response.json();

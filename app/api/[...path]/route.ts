@@ -38,7 +38,7 @@ export async function GET(req:NextRequest,{params}:{params:Promise<{path:string[
  if(path==='board'||path==='screen-board'){
   const requested=req.nextUrl.searchParams.get('round');
   if(requested&&!roundIdValid(requested))return json({error:'Ugyldig runde.'},400);
-  if(path==='screen-board'&&(!requested||!verifyScreenToken(req.headers.get('authorization')?.replace(/^Bearer /,'')||'',requested,process.env.SESSION_SECRET||'')))return json({error:'Åbn rundens storskærmslink fra personalepanelet.'},401);
+  if(path==='screen-board'&&(!requested||!verifyScreenToken(req.headers.get('authorization')?.replace(/^Bearer /,'')||'',requested,process.env.SESSION_SECRET||'')))return json({error:'Storskærmslinket er ugyldigt eller udløbet. Bed om et nyt link til konkurrencen.'},401);
   if(!configured())return path==='screen-board'
    ? json({error:'Supabase er ikke forbundet på denne Vercel-deployment. Kontrollér SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY og SESSION_SECRET i Production Environment.'},503)
    : json({configured:false,round:null,entries:[],participants:0,serverTime:new Date().toISOString()});
