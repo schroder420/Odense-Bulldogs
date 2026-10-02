@@ -6,7 +6,7 @@ import {PGlite} from '@electric-sql/pglite';
 import {runLimit} from '../lib/game';
 import {screenView} from '../lib/screen';
 import {screenToken,verifyScreenToken} from '../lib/screen-token';
-import {submissionDelay} from '../lib/competition';
+import {submissionDelay,closingCountdown} from '../lib/competition';
 import type {Round} from '../lib/types';
 const migrationFiles=['001_initial.sql','002_opponent_kit.sql','003_screen_control.sql','004_total_score.sql','005_qr_screen.sql','006_viggos_prize.sql','008_default_prize.sql','009_scheduled_competitions.sql','011_start_round_now.sql'];
 async function database(){const db=new PGlite();await db.exec('create role anon; create role authenticated; create role service_role bypassrls;');for(const file of migrationFiles)await db.exec(await readFile(new URL('../supabase/'+file,import.meta.url),'utf8'));return db;}
@@ -90,4 +90,15 @@ test('start now preserves duration and screen identity, opens play, and cannot r
   await db.query("update rounds set status='final' where id=$1",[r]);
   await assert.rejects(db.query('select start_round_now($1)',[r]),/ROUND_CLOSED/);
  }finally{await db.close();}
+});
+
+test('phone countdown uses the last ten seconds of the game deadline, never practice',()=>{
+ assert.equal(closingCountdown(10001,false),null);
+ assert.equal(closingCountdown(10000,false),10);
+ assert.equal(closingCountdown(9000,false),9);
+ assert.equal(closingCountdown(1,false),1);
+ assert.equal(closingCountdown(0,false),null);
+ assert.equal(closingCountdown(-100,false),null);
+ assert.equal(closingCountdown(5000,true),null);
+ assert.equal(closingCountdown(Infinity,false),null);
 });

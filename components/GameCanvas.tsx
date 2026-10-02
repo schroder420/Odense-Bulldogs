@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {act,advance,distanceToSegment,causes,createGame,formatScore,formatTime,HEIGHT,position,totalScore,WIDTH,reasons,type Game,type Stage,type Point} from '@/lib/game';
+import {closingCountdown} from '@/lib/competition';
 import {tintOpponent} from '@/lib/sprites';
 import {waitingPose,puckOffset,endpointWeight,type Pose} from '@/lib/skater-pose';
 import type {OpponentKit} from '@/lib/team';
@@ -11,7 +12,7 @@ const MARK_FOR=1100,FADE_FROM=480,FADE_OVER=420;
 const LOBBY_CAMERA=360;
 export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=false,onboardingBusy=false,onFirstPass,demo=false}:{demo?:boolean;onboarding?:boolean;onboardingBusy?:boolean;onFirstPass?:(target:string)=>void;session:Session|null;onEnd:(g:Game)=>void;onReady?:(ready:boolean)=>void;opponent?:OpponentKit}){
  const canvas=useRef<HTMLCanvasElement>(null);const game=useRef<Game|null>(null);const camera=useRef(0);const start=useRef(0);const callback=useRef(onEnd);callback.current=onEnd;
- const [hud,setHud]=useState({time:0,passes:0,points:0,short:false,step:0,flight:false});const [assetError,setAssetError]=useState(false);
+ const [hud,setHud]=useState({time:0,passes:0,points:0,short:false,step:0,flight:false,remaining:Infinity});const [assetError,setAssetError]=useState(false);
  const kit=session?.opponent||opponent;const kitKey=`${kit?.primary||''}${kit?.stripe||''}`;
  useEffect(()=>{
   let finishTimer:ReturnType<typeof setTimeout>|undefined;
@@ -30,7 +31,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=fa
   const stridesFor=(id:string)=>id.charCodeAt(id.length-1)%2===1;
   const art=(team:'home'|'away',stride:boolean):CanvasImageSource=>
    team==='home'?(stride?homeStride:homeGlide):(stride?awayStrideArt:awayGlideArt);
-  const g=createGame(session?.seed||1978,session?.limit??Infinity);game.current=g;camera.current=0;renderedStage=g.stage;
+  const g=createGame(session?.seed||1978,session?.limit??Infinity);game.current=g;camera.current=0;renderedStage=g.stage;setHud({time:0,passes:0,points:0,short:false,step:0,flight:false,remaining:g.limit});
   let landing:Pose={front:0,mirror:false,angle:0,stride:false};
   let flightStamp=-1,launch=landing,receiver=landing;
   const activePose=(time:number):Pose=>{
@@ -140,7 +141,7 @@ export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=fa
    const dt=lastFrame?Math.min(100,now-lastFrame):16.67;lastFrame=now;
    camera.current+=(targetCamera-camera.current)*(1-Math.exp(-dt/85));
    draw();
-   if(now-lastHud>60){setHud({time:g.score,passes:g.passes,points:totalScore(g),short:g.stage.shortHanded,step:g.step,flight:!!g.flight});lastHud=now;}
+   if(now-lastHud>60){setHud({time:g.score,passes:g.passes,points:totalScore(g),short:g.stage.shortHanded,step:g.step,flight:!!g.flight,remaining:Math.max(0,g.limit-g.now)});lastHud=now;}
    // Billederne fortsaetter lidt efter doeden, saa aarsagen naar at blive set, foer skaermen toner ned.
    // frame nulstilles, naar sloejfen stopper, saa demoen kan startes igen ved fanevisning.
    frame=(session?(!g.dead||now-deadAt<MARK_FOR):(!document.hidden&&!stillness))?requestAnimationFrame(loop):0;
@@ -157,8 +158,9 @@ export default function GameCanvas({session,onEnd,onReady,opponent,onboarding=fa
   const b=g.stage.bank;if(b&&Math.hypot(x-b.point.x,y-b.point.y)<43){input(b.target,true);return;}
   const candidates=[...g.stage.home,...g.stage.away].map(p=>({p,d:Math.hypot(x-position(p,g.now).x,y-p.y)})).sort((a,b)=>a.d-b.d);if(candidates[0]?.d<43)input(candidates[0].p.id);
  }
+ const countdown=session&&!demo&&!onboarding?closingCountdown(hud.remaining,session.practice):null;
  return <><div className={`game-hud ${onboarding?'onboarding-hud':''}`}><div><span>SCORE</span><strong>{formatScore(hud.points)}<small> POINT</small></strong></div>
- <div className="metric"><span>OVERLEVELSE</span><strong>{formatTime(hud.time)}<small> SEK</small></strong></div>
+ <div className={`metric ${countdown!==null?'closing-countdown':''}`} role={countdown!==null?'timer':undefined} aria-label={countdown!==null?`Konkurrencen slutter om ${countdown} sekunder`:undefined}><span>{countdown!==null?'SLUTFLØJT OM':'OVERLEVELSE'}</span><strong>{countdown!==null?countdown:formatTime(hud.time)}<small> SEK</small></strong></div>
  <div className="metric passes"><span>AFLEVERINGER</span><strong>{String(hud.passes).padStart(2,'0')}</strong></div></div>
  <div className="canvas-box"><canvas ref={canvas} width={WIDTH} height={HEIGHT} onPointerDown={pointer} aria-label="Ishockeybane. Tryk på hvide Bulldogs-medspillere for at aflevere." />
  {onboarding&&<p className="onboarding-status" role="status">{onboardingBusy?'Gør dit forsøg klar…':'Tag dig god tid – uret er ikke startet'}</p>}
