@@ -8,3 +8,6 @@ playwright-report/
 .vercel/
 .DS_Store
 output/
+
+# Lokal genvej til projektmaterialet på Ingrids Mac (må ikke i repoet; giver build-fejl på Vercel)
+Projektmateriale
