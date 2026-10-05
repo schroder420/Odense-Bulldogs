@@ -1,0 +1,5 @@
+/* Kampguiden har klubbens lyse papirfarve i stedet for spillets mørke baggrund. */
+.page{min-height:100dvh;background:#e8eee8;color:#254d32;color-scheme:light}
+.slides{max-width:540px;margin:0 auto;padding:16px 16px 40px;display:flex;flex-direction:column;gap:16px}
+.slides img{display:block;width:100%;height:auto;border-radius:6px;box-shadow:0 6px 24px rgba(11,36,26,.12)}
+.pdf{display:block;padding:16px;border-radius:6px;background:#254d32;color:#f7f8f2;text-align:center;font-family:var(--heading);font-weight:700;font-size:22px;letter-spacing:.06em;text-transform:uppercase}
