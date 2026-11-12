@@ -1,7 +1,7 @@
-/* Kampguiden har klubbens lyse papirfarve i stedet for spillets mørke baggrund. */
-.page{min-height:100dvh;background:#e8eee8;color:#254d32;color-scheme:light}
+/* Kampguiden (v2, nov. 2026) har samme mørke arenagrønne baggrund som slides. */
+.page{min-height:100dvh;background:#0a1f16;color:#ecf2ec;color-scheme:dark}
 .slides{max-width:540px;margin:0 auto;padding:16px 16px 40px;display:flex;flex-direction:column;gap:16px}
-.slides img{display:block;width:100%;height:auto;border-radius:10px;box-shadow:0 10px 30px rgba(11,36,26,.14)}
+.slides img{display:block;width:100%;height:auto;border-radius:10px;outline:1px solid rgba(236,242,236,.12)}
 /* PDF-knappen følger med nederst, så den kan findes uanset hvor langt man har scrollet. */
-.pdf{position:sticky;bottom:max(16px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;border-radius:999px;background:#ae0a1b;color:#f7f8f2;text-align:center;font-family:var(--heading);font-weight:700;font-size:22px;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 10px 26px rgba(174,10,27,.35)}
+.pdf{position:sticky;bottom:max(16px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;border-radius:999px;background:#ae0a1b;color:#ecf2ec;text-align:center;font-family:var(--heading);font-weight:700;font-size:22px;letter-spacing:.06em;text-transform:uppercase;box-shadow:0 10px 26px rgba(0,0,0,.45)}
 .pdf:active{transform:translateY(1px)}
